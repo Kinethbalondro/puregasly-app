@@ -79,7 +79,10 @@ function shapeOrder(o, storeName) {
     deliveredAt: o.deliveredAt || null,
     notes: o.notes,
     paymentMethod: o.paymentMethod,
-    rider: o.rider && o.rider.name ? { id: o.rider._id, name: o.rider.name } : null,
+    rider:
+      o.rider && o.rider.name
+        ? { id: o.rider._id, name: o.rider.name, avatar: o.rider.avatar ? String(o.rider.avatar) : null }
+        : null,
     reviewed: !!o.reviewed,
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
@@ -255,7 +258,7 @@ exports.mine = async (req, res) => {
   try {
     const orders = await Order.find({ customer: req.userId })
       .populate('storeId', 'name')
-      .populate('rider', 'name')
+      .populate('rider', 'name avatar')
       .sort({ createdAt: -1 });
     return res.json(orders.map((o) => shapeOrder(o)));
   } catch (err) {

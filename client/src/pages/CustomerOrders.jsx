@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import Avatar from '../components/Avatar';
 import api from '../api/axios';
 import AppShell from '../components/AppShell';
 import OrderTracker from '../components/OrderTracker';
@@ -137,7 +138,11 @@ export default function CustomerOrders() {
                 🕒 Deliver:{' '}
                 {o.deliveryTimeType === 'scheduled' ? <strong>{deliverWhen(o)}</strong> : deliverWhen(o)}
               </p>
-              {o.rider && <p className="muted small">🛵 Rider: {o.rider.name}</p>}
+              {o.rider && (
+                <p className="muted small person-inline">
+                  🛵 Rider: <Avatar name={o.rider.name} src={o.rider.avatar} size={22} /> {o.rider.name}
+                </p>
+              )}
 
               {showCode(o) && (
                 <div

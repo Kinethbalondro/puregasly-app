@@ -18,7 +18,14 @@ export const STATUS_LABELS = {
 export const CATEGORY_LABELS = { lpg: 'LPG Tank', refill: 'Refill', accessory: 'Accessory' };
 
 export function errMsg(err, fallback = 'Something went wrong.') {
-  return err.response?.data?.message || (err.response ? fallback : 'Could not reach the server.');
+  const serverMessage = err.response?.data?.message;
+  if (serverMessage) return serverMessage;
+  if (!err.response) return 'Could not reach the server. Check your connection and try again.';
+  // 502/503/504 come from the host, not our API - usually it is waking up after being idle.
+  if ([502, 503, 504].includes(err.response.status)) {
+    return 'The server is waking up or busy. Please try again in a few seconds.';
+  }
+  return fallback;
 }
 
 // Triggers a browser download from an axios blob response.

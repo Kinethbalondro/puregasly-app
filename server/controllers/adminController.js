@@ -1,6 +1,8 @@
 const User = require('../models/User');
 const Store = require('../models/Store');
 const Order = require('../models/Order');
+const StoreDocument = require('../models/StoreDocument');
+const { REQUIRED_KEYS, labelOf } = require('../utils/documentTypes');
 const { restoreStock } = require('../utils/stock');
 const { notify } = require('../utils/notify');
 const { logAdminAction } = require('../utils/audit');
@@ -25,6 +27,7 @@ function shapeUser(u) {
     name: u.name,
     email: u.email,
     role: u.role,
+    avatar: u.avatar ? String(u.avatar) : null,
     banned: !!u.banned,
     banReason: u.banReason,
     createdAt: u.createdAt,
@@ -61,7 +64,30 @@ exports.listStores = async (req, res) => {
     const filter = {};
     if (['pending', 'approved', 'rejected', 'banned'].includes(req.query.status)) filter.status = req.query.status;
     const stores = await Store.find(filter).populate('owner', 'name email banned').sort({ createdAt: -1 });
-    return res.json(stores.map(shapeStore));
+    const docs = await StoreDocument.find({ store: { $in: stores.map((s) => s._id) } }).sort({ createdAt: 1 });
+    const byStore = {};
+    docs.forEach((d) => {
+      (byStore[String(d.store)] = byStore[String(d.store)] || []).push({
+        id: d._id,
+        type: d.type,
+        label: labelOf(d.type),
+        originalName: d.originalName,
+        mimeType: d.mimeType,
+        size: d.size,
+        uploadedAt: d.createdAt,
+      });
+    });
+    return res.json(
+      stores.map((s) => {
+        const documents = byStore[String(s._id)] || [];
+        const have = new Set(documents.map((d) => d.type));
+        return {
+          ...shapeStore(s),
+          documents,
+          missingRequired: REQUIRED_KEYS.filter((k) => !have.has(k)).map(labelOf),
+        };
+      })
+    );
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Something went wrong.' });
@@ -287,6 +313,20 @@ exports.resolveAppeal = async (req, res) => {
     });
 
     return res.json(shapeStore(store));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  }
+};
+
+exports.downloadDocument = async (req, res) => {
+  try {
+    const doc = await StoreDocument.findOne({ _id: req.params.docId, store: req.params.id }).select('+data');
+    if (!doc) return res.status(404).json({ message: 'Document not found.' });
+    res.setHeader('Content-Type', doc.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.originalName || 'document'}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.send(doc.data);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Something went wrong.' });

@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import api from '../api/axios';
+import useAutoRefresh from '../utils/useAutoRefresh';
 
 const AuthContext = createContext(null);
 
@@ -13,11 +14,18 @@ export function AuthProvider({ children }) {
     }
   });
   const [loading, setLoading] = useState(true);
+  const userRef = useRef(user);
+  userRef.current = user;
 
   const refresh = useCallback(async () => {
     const res = await api.get('/auth/me');
-    setUser(res.data);
-    localStorage.setItem('pg_user', JSON.stringify(res.data));
+    const json = JSON.stringify(res.data);
+    // Only touch state when something actually changed, so the background
+    // refresh below never re-renders the whole app for nothing.
+    if (json !== JSON.stringify(userRef.current)) {
+      setUser(res.data);
+    }
+    localStorage.setItem('pg_user', json);
     return res.data;
   }, []);
 
@@ -44,6 +52,17 @@ export function AuthProvider({ children }) {
     window.addEventListener('pg:refresh-user', handler);
     return () => window.removeEventListener('pg:refresh-user', handler);
   }, [refresh]);
+
+  // The session was ended elsewhere (logout everywhere, ban, expiry).
+  useEffect(() => {
+    const handler = () => setUser(null);
+    window.addEventListener('pg:session-ended', handler);
+    return () => window.removeEventListener('pg:session-ended', handler);
+  }, []);
+
+  // Keeps account/store status, permissions, avatar etc. current, and notices
+  // quickly when this device has been logged out from another one.
+  useAutoRefresh(() => refresh().catch(() => {}), 15000, !!user);
 
   function login(token, refreshToken, userData) {
     localStorage.setItem('pg_token', token);

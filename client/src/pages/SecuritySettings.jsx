@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import useAutoRefresh from '../utils/useAutoRefresh';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import AppShell from '../components/AppShell';
@@ -8,6 +9,8 @@ import { useConfirm } from '../context/ConfirmContext';
 import Spinner from '../components/Spinner';
 import { SkeletonRows } from '../components/Skeleton';
 import usePageTitle from '../utils/usePageTitle';
+import ChangePasswordForm from '../components/ChangePasswordForm';
+import ChangeEmailForm from '../components/ChangeEmailForm';
 
 function parseDevice(ua) {
   if (!ua) return 'Unknown device';
@@ -41,14 +44,14 @@ export default function SecuritySettings() {
   const [busyId, setBusyId] = useState(null);
   const [loggingOutAll, setLoggingOutAll] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent) => {
     try {
       const current = localStorage.getItem('pg_refresh') || '';
       const res = await api.get('/auth/sessions', { params: { current } });
       setSessions(res.data);
       setError('');
     } catch (err) {
-      setError(errMsg(err, 'Could not load your sessions.'));
+      if (silent !== true) setError(errMsg(err, 'Could not load your sessions.'));
     } finally {
       setLoading(false);
     }
@@ -57,6 +60,8 @@ export default function SecuritySettings() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useAutoRefresh(() => load(true), 10000);
 
   async function revoke(id) {
     setBusyId(id);
@@ -86,6 +91,7 @@ export default function SecuritySettings() {
     localStorage.removeItem('pg_token');
     localStorage.removeItem('pg_refresh');
     localStorage.removeItem('pg_user');
+    window.dispatchEvent(new Event('pg:session-ended'));
     navigate('/login', { replace: true });
   }
 
@@ -93,8 +99,11 @@ export default function SecuritySettings() {
     <AppShell>
       <h1 className="page-title">Security</h1>
       <p className="muted small" style={{ marginBottom: 20 }}>
-        These are the devices currently signed in to your account. If you don't recognize one, log it out.
+        Manage your password and email, and see which devices are signed in to your account.
       </p>
+
+      <ChangePasswordForm onChanged={() => load(true)} />
+      <ChangeEmailForm />
 
       {error && <div className="message error">{error}</div>}
 

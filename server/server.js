@@ -22,6 +22,8 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const favoriteRoutes = require('./routes/favoriteRoutes');
 const addressRoutes = require('./routes/addressRoutes');
 const couponRoutes = require('./routes/couponRoutes');
+const mediaRoutes = require('./routes/mediaRoutes');
+const profileRoutes = require('./routes/profileRoutes');
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   console.error('JWT_SECRET is missing or too short. Set a long random string in server/.env');
@@ -69,6 +71,15 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
+const mediaLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 2000,
+  message: { message: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/media', mediaLimiter, mediaRoutes);
+
 // General ceiling for everything else so one client can't hammer the API.
 const apiLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -96,6 +107,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/coupons', couponRoutes);
+app.use('/api/profile', profileRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

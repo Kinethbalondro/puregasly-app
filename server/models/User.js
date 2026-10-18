@@ -35,6 +35,12 @@ const userSchema = new mongoose.Schema(
     otpCode: { type: String, select: false, default: null },
     otpExpires: { type: Date, select: false, default: null },
     otpAttempts: { type: Number, default: 0 },
+    // What the current code is for: 'signup' | 'reset' | 'email_change' ('' = an old signup code).
+    // A code only works for the purpose it was made for.
+    otpPurpose: { type: String, select: false, default: '' },
+    otpSentAt: { type: Date, select: false, default: null },
+    // The new address while an email change waits for its code.
+    pendingEmail: { type: String, select: false, default: null },
 
     // Links owners AND employees to their store.
     storeId: {
@@ -48,6 +54,11 @@ const userSchema = new mongoose.Schema(
     banned: { type: Boolean, default: false },
     banReason: { type: String, default: '' },
     bannedAt: { type: Date, default: null },
+    // Profile picture (Media id). Shown to others where relevant (reviews, team lists).
+    avatar: { type: mongoose.Schema.Types.ObjectId, ref: 'Media', default: null },
+    // Recorded when someone ticks the privacy-policy box at sign-up.
+    privacyAcceptedAt: { type: Date, default: null },
+    privacyVersion: { type: String, default: '' },
     // Account lockout after repeated failed login attempts.
     failedLoginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },

@@ -1,18 +1,26 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import usePageTitle from '../utils/usePageTitle';
 import Spinner from '../components/Spinner';
 import AuthVisual from '../components/AuthVisual';
+import DocumentUploads from '../components/DocumentUploads';
+import { DOCUMENT_TYPES } from '../utils/documentTypes';
+import { errMsg } from '../utils/format';
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
 export default function Register() {
   usePageTitle('Register');
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Coming from the login page with an account that never finished email
+  // verification: open the code screen straight away.
+  const verifyEmail = location.state?.verifyEmail || '';
 
   // 'form' = the sign-up form, 'otp' = enter the 6-digit code (customers only)
-  const [step, setStep] = useState('form');
+  const [step, setStep] = useState(verifyEmail ? 'otp' : 'form');
 
   const [role, setRole] = useState('customer');
   const [name, setName] = useState('');
@@ -20,12 +28,14 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [docs, setDocs] = useState({});
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
+  const [info, setInfo] = useState(verifyEmail ? `Enter the 6-digit code we sent to ${verifyEmail}, or request a new one.` : '');
   const [submitting, setSubmitting] = useState(false);
 
   // OTP step state
-  const [otpEmail, setOtpEmail] = useState('');
+  const [otpEmail, setOtpEmail] = useState(verifyEmail);
   const [otp, setOtp] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
@@ -52,9 +62,33 @@ export default function Register() {
       return;
     }
 
+    if (!acceptedPrivacy) {
+      setError('Please accept the Privacy Policy to continue.');
+      return;
+    }
+
+    if (role === 'owner') {
+      const missing = DOCUMENT_TYPES.find((d) => d.required && !docs[d.key]);
+      if (missing) {
+        setError(`Please upload: ${missing.label}.`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      const res = await api.post('/auth/register', { name, email, password, role, storeName });
+      // multipart so the business documents can travel with the sign-up.
+      const form = new FormData();
+      form.append('name', name);
+      form.append('email', email);
+      form.append('password', password);
+      form.append('role', role);
+      form.append('acceptedPrivacy', 'true');
+      if (role === 'owner') {
+        form.append('storeName', storeName);
+        Object.entries(docs).forEach(([key, file]) => form.append(key, file));
+      }
+      const res = await api.post('/auth/register', form);
 
       // Customers get a code by email and must enter it before they can log in.
       if (res.data.otpRequired) {
@@ -94,11 +128,9 @@ export default function Register() {
     setVerifying(true);
     try {
       await api.post('/auth/verify-otp', { email: otpEmail, otp });
-      navigate('/login', {
-        state: { status: 'Email verified! You can now log in.' },
-      });
+      navigate('/login', { state: { status: 'Email verified! You can now log in.' } });
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not reach the server.');
+      setError(errMsg(err));
     } finally {
       setVerifying(false);
     }
@@ -115,7 +147,7 @@ export default function Register() {
       setCooldown(RESEND_COOLDOWN_SECONDS);
       setInfo('A new code was sent. Check your inbox (and your spam folder).');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not reach the server.');
+      setError(errMsg(err));
     } finally {
       setResending(false);
     }
@@ -132,31 +164,9 @@ export default function Register() {
     <div className="auth-page">
       <AuthVisual />
 
-      <div className="auth-form-side" style={{ position: 'relative' }}>
+      <div className="auth-form-side">
         {step === 'form' && (
-          <Link
-            to="/login"
-            aria-label="Back to login"
-            title="Back to login"
-            style={{
-              position: 'absolute',
-              top: '20px',
-              left: '20px',
-              width: '40px',
-              height: '40px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '50%',
-              border: '1px solid #e5e7eb',
-              background: '#ffffff',
-              color: '#1f2937',
-              fontSize: '1.2rem',
-              lineHeight: 1,
-              textDecoration: 'none',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-            }}
-          >
+          <Link to="/login" className="auth-back" aria-label="Back to login" title="Back to login">
             ←
           </Link>
         )}
@@ -181,6 +191,7 @@ export default function Register() {
                   <input
                     type="text"
                     id="otp"
+                    className="otp-input"
                     required
                     inputMode="numeric"
                     autoComplete="one-time-code"
@@ -188,7 +199,6 @@ export default function Register() {
                     placeholder="123456"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    style={{ textAlign: 'center', letterSpacing: '0.5em', fontSize: '1.4rem' }}
                   />
                 </div>
 
@@ -199,174 +209,162 @@ export default function Register() {
 
               <p className="switch-link">
                 Didn't get it?{' '}
-                <button
-                  type="button"
-                  onClick={handleResend}
-                  disabled={cooldown > 0 || resending}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    font: 'inherit',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: cooldown > 0 || resending ? 'not-allowed' : 'pointer',
-                    opacity: cooldown > 0 || resending ? 0.6 : 1,
-                  }}
-                >
+                <button type="button" className="link-btn" onClick={handleResend} disabled={cooldown > 0 || resending}>
                   {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
                 </button>
               </p>
 
               <p className="switch-link">
                 Wrong email?{' '}
-                <button
-                  type="button"
-                  onClick={handleChangeEmail}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    font: 'inherit',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button type="button" className="link-btn" onClick={handleChangeEmail}>
                   Go back
                 </button>
               </p>
             </>
           ) : (
             <>
-              <h1 className="auth-heading">Create your account</h1>
-              <p className="subtitle">Join PureGasly as a customer or store owner</p>
+          <h1 className="auth-heading">Create your account</h1>
+          <p className="subtitle">Join PureGasly as a customer or store owner</p>
 
-              {error && <div className="message error">{error}</div>}
+          {error && <div className="message error">{error}</div>}
 
-              <form onSubmit={handleSubmit}>
-                <div className="role-toggle">
-                  <label className={role === 'customer' ? 'active' : ''}>
-                    <input
-                      type="radio"
-                      name="role"
-                      value="customer"
-                      checked={role === 'customer'}
-                      onChange={() => setRole('customer')}
-                    />
-                    <span>Customer</span>
-                  </label>
-                  <label className={role === 'owner' ? 'active' : ''}>
-                    <input
-                      type="radio"
-                      name="role"
-                      value="owner"
-                      checked={role === 'owner'}
-                      onChange={() => setRole('owner')}
-                    />
-                    <span>Store Owner</span>
-                  </label>
+          <form onSubmit={handleSubmit}>
+            <div className="role-toggle">
+              <label className={role === 'customer' ? 'active' : ''}>
+                <input
+                  type="radio"
+                  name="role"
+                  value="customer"
+                  checked={role === 'customer'}
+                  onChange={() => setRole('customer')}
+                />
+                <span>Customer</span>
+              </label>
+              <label className={role === 'owner' ? 'active' : ''}>
+                <input
+                  type="radio"
+                  name="role"
+                  value="owner"
+                  checked={role === 'owner'}
+                  onChange={() => setRole('owner')}
+                />
+                <span>Store Owner</span>
+              </label>
+            </div>
+
+            <div className="field">
+              <label htmlFor="name">Full Name</label>
+              <div className="field-icon-wrap">
+                <span className="field-icon">👤</span>
+                <input
+                  type="text"
+                  id="name"
+                  required
+                  minLength={4}
+                  placeholder="e.g. Juan Dela Cruz"
+                  title="Enter your first and last name (letters only)"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {role === 'owner' && (
+              <div className="field">
+                <label htmlFor="storeName">Store Name</label>
+                <div className="field-icon-wrap">
+                  <span className="field-icon">🏪</span>
+                  <input
+                    type="text"
+                    id="storeName"
+                    required
+                    placeholder="e.g. Dela Cruz LPG Depot"
+                    value={storeName}
+                    onChange={(e) => setStoreName(e.target.value)}
+                  />
                 </div>
+              </div>
+            )}
 
-                <div className="field">
-                  <label htmlFor="name">Full Name</label>
-                  <div className="field-icon-wrap">
-                    <span className="field-icon">👤</span>
-                    <input
-                      type="text"
-                      id="name"
-                      required
-                      minLength={4}
-                      placeholder="e.g. Juan Dela Cruz"
-                      title="Enter your first and last name (letters only)"
-                      autoComplete="name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {role === 'owner' && (
-                  <div className="field">
-                    <label htmlFor="storeName">Store Name</label>
-                    <div className="field-icon-wrap">
-                      <span className="field-icon">🏪</span>
-                      <input
-                        type="text"
-                        id="storeName"
-                        required
-                        placeholder="e.g. Dela Cruz LPG Depot"
-                        value={storeName}
-                        onChange={(e) => setStoreName(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {role === 'owner' && (
-                  <p className="muted small auth-note">
-                    Store accounts need admin approval before you can log in.
-                  </p>
-                )}
-
-                <div className="field">
-                  <label htmlFor="email">Email</label>
-                  <div className="field-icon-wrap">
-                    <span className="field-icon">✉️</span>
-                    <input
-                      type="email"
-                      id="email"
-                      required
-                      autoComplete="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="field-row">
-                  <div className="field">
-                    <label htmlFor="password">Password</label>
-                    <div className="field-icon-wrap">
-                      <span className="field-icon">🔒</span>
-                      <input
-                        type="password"
-                        id="password"
-                        required
-                        minLength={8}
-                        autoComplete="new-password"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="field">
-                    <label htmlFor="confirmPassword">Confirm Password</label>
-                    <div className="field-icon-wrap">
-                      <span className="field-icon">🔒</span>
-                      <input
-                        type="password"
-                        id="confirmPassword"
-                        required
-                        minLength={8}
-                        autoComplete="new-password"
-                        placeholder="••••••••"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <button type="submit" className="btn-primary" disabled={submitting}>
-                  {submitting && <Spinner light />}{submitting ? 'Creating account...' : 'Create Account'}
-                </button>
-              </form>
-
-              <p className="switch-link">
-                Already have an account? <Link to="/login">Log in</Link>
+            {role === 'owner' && (
+              <p className="muted small auth-note">
+                Store accounts need admin approval before you can log in.
               </p>
+            )}
+
+            {role === 'owner' && <DocumentUploads files={docs} onChange={setDocs} onError={setError} />}
+
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <div className="field-icon-wrap">
+                <span className="field-icon">✉️</span>
+                <input
+                  type="email"
+                  id="email"
+                  required
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label htmlFor="password">Password</label>
+                <div className="field-icon-wrap">
+                  <span className="field-icon">🔒</span>
+                  <input
+                    type="password"
+                    id="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="confirmPassword">Confirm Password</label>
+                <div className="field-icon-wrap">
+                  <span className="field-icon">🔒</span>
+                  <input
+                    type="password"
+                    id="confirmPassword"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <label className="consent">
+              <input
+                type="checkbox"
+                checked={acceptedPrivacy}
+                onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+              />
+              <span>
+                I have read and agree to the{' '}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+              </span>
+            </label>
+
+            <button type="submit" className="btn-primary" disabled={submitting}>
+              {submitting && <Spinner light />}{submitting ? 'Creating account...' : 'Create Account'}
+            </button>
+          </form>
+
+          <p className="switch-link">
+            Already have an account? <Link to="/login">Log in</Link>
+          </p>
             </>
           )}
         </div>

@@ -22,6 +22,9 @@ import SecuritySettings from './pages/SecuritySettings';
 import Favorites from './pages/Favorites';
 import AddressBook from './pages/AddressBook';
 import ManageCoupons from './pages/ManageCoupons';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import ForgotPassword from './pages/ForgotPassword';
+import Profile from './pages/Profile';
 
 const guard = (element, roles) => <ProtectedRoute roles={roles}>{element}</ProtectedRoute>;
 
@@ -51,6 +54,8 @@ export default function App() {
                 <Route path="/" element={<Navigate to="/login" replace />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/dashboard" element={guard(<Dashboard />)} />
                 <Route path="/orders" element={guard(<CustomerOrders />, ['customer'])} />
                 <Route path="/employees" element={guard(<ManageEmployees />, ['owner'])} />
@@ -58,6 +63,7 @@ export default function App() {
                 <Route path="/store-orders" element={guard(<StoreOrders />, ['owner', 'employee'])} />
                 <Route path="/analytics" element={guard(<StoreAnalytics />, ['owner', 'employee'])} />
                 <Route path="/riders" element={guard(<ManageRiders />, ['owner', 'employee'])} />
+                <Route path="/profile" element={guard(<Profile />)} />
                 <Route path="/security" element={guard(<SecuritySettings />)} />
                 <Route path="/favorites" element={guard(<Favorites />, ['customer'])} />
                 <Route path="/addresses" element={guard(<AddressBook />, ['customer'])} />

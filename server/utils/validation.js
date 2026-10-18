@@ -15,38 +15,53 @@ function isValidName(raw) {
   return NAME_REGEX.test(name);
 }
 
-// Checks the email's domain actually has mail-capable DNS records (MX, or
-// failing that A/AAAA, since some small domains route mail without a
-// dedicated MX record). This catches typo'd/nonexistent domains
-// (e.g. "user@gnail.con") without needing a paid verification API or
-// sending an actual confirmation email (no email service is configured
-// yet) - it does NOT confirm the mailbox itself exists, only that the
-// domain could plausibly receive mail.
+// Checks that the email's domain can plausibly receive mail (MX, or A/AAAA as a
+// fallback). Catches typo'd domains like "user@gnail.con" without an email
+// service. It ONLY rejects when DNS clearly says the domain has no records
+// (ENOTFOUND / ENODATA). A timeout, SERVFAIL or other resolver hiccup - common
+// on small hosting plans - is treated as "can't tell" and the email is allowed,
+// so a flaky lookup never blocks a real person from signing up or being added.
+const DEFINITE_NO = new Set(['ENOTFOUND', 'ENODATA', 'NXDOMAIN']);
+const domainCache = new Map(); // domain -> { ok, at }
+const CACHE_MS = 10 * 60 * 1000;
+
 async function hasValidMailDomain(email) {
   const domain = String(email || '').split('@')[1];
   if (!domain) return false;
+  const key = domain.toLowerCase();
+
+  const hit = domainCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.ok;
 
   const withTimeout = (promise) =>
-    Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('dns timeout')), 3000))]);
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('dns timeout'), { code: 'ETIMEOUT' })), 3000)),
+    ]);
 
-  try {
-    const mx = await withTimeout(dns.resolveMx(domain));
-    if (mx && mx.length > 0) return true;
-  } catch {
-    // no MX records (or lookup failed) - fall through and try A/AAAA below
-  }
-
-  try {
-    const a = await withTimeout(dns.resolve(domain));
-    return !!(a && a.length > 0);
-  } catch {
+  // Returns 'yes' | 'no' | 'unknown' for one lookup.
+  const attempt = async (fn) => {
     try {
-      const aaaa = await withTimeout(dns.resolve6(domain));
-      return !!(aaaa && aaaa.length > 0);
-    } catch {
-      return false;
+      const r = await withTimeout(fn());
+      return r && r.length > 0 ? 'yes' : 'no';
+    } catch (err) {
+      return DEFINITE_NO.has(err && err.code) ? 'no' : 'unknown';
     }
+  };
+
+  const results = [];
+  for (const fn of [() => dns.resolveMx(key), () => dns.resolve(key), () => dns.resolve6(key)]) {
+    const r = await attempt(fn);
+    if (r === 'yes') {
+      domainCache.set(key, { ok: true, at: Date.now() });
+      return true;
+    }
+    results.push(r);
   }
+
+  if (results.includes('unknown')) return true; // couldn't verify - don't block
+  domainCache.set(key, { ok: false, at: Date.now() });
+  return false; // every lookup said the domain doesn't exist
 }
 
 module.exports = { isValidName, hasValidMailDomain, EMAIL_REGEX };

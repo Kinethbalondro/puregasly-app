@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../../api/axios';
+import Avatar from '../../components/Avatar';
 import RouteMap from '../RouteMap';
 import { errMsg, formatDateTime, formatPHP } from '../../utils/format';
 import usePageTitle from '../../utils/usePageTitle';
@@ -98,7 +99,10 @@ export default function RiderDashboard({ user }) {
 
               <span className={`status-pill ${o.status}`}>{STATUS_LABEL[o.status] || o.status}</span>
 
-              <p className="small">👤 {o.customer?.name || 'Customer'} · 📞 {o.contactNumber}</p>
+              <p className="small person-inline">
+                👤 <Avatar name={o.customer?.name || 'Customer'} src={o.customer?.avatar} size={24} />
+                {o.customer?.name || 'Customer'} · 📞 {o.contactNumber}
+              </p>
               <p className="small">📍 {o.deliveryAddress}</p>
               <p className="small">
                 🕒 Deliver:{' '}

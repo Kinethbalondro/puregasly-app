@@ -12,7 +12,10 @@ function shape(o) {
   return {
     id: o._id,
     orderNo: o.orderNo,
-    customer: o.customer && o.customer.name ? { name: o.customer.name } : null,
+    customer:
+      o.customer && o.customer.name
+        ? { name: o.customer.name, avatar: o.customer.avatar ? String(o.customer.avatar) : null }
+        : null,
     storeName: o.storeId && o.storeId.name ? o.storeId.name : '',
     items: o.items,
     total: o.total,
@@ -39,7 +42,7 @@ exports.list = async (req, res) => {
     if (req.query.active === 'true') filter.status = { $in: ['preparing', 'out_for_delivery'] };
 
     const orders = await Order.find(filter)
-      .populate('customer', 'name')
+      .populate('customer', 'name avatar')
       .populate('storeId', 'name')
       .sort({ createdAt: -1 })
       .limit(200);
@@ -87,7 +90,7 @@ exports.advance = async (req, res) => {
       { $set: set, $push: { statusHistory: { status: next, at: new Date() } } },
       { new: true }
     )
-      .populate('customer', 'name')
+      .populate('customer', 'name avatar')
       .populate('storeId', 'name');
 
     if (!order) return res.status(409).json({ message: 'This delivery was just updated. Please refresh.' });

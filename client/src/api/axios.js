@@ -17,7 +17,7 @@ const rawApi = axios.create({ baseURL });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('pg_token');
-  if (token) {
+  if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -27,6 +27,7 @@ function clearSession() {
   localStorage.removeItem('pg_token');
   localStorage.removeItem('pg_refresh');
   localStorage.removeItem('pg_user');
+  window.dispatchEvent(new Event('pg:session-ended'));
 }
 
 // Codes that mean "this account can't be used right now" -> sign out with a notice.
@@ -71,8 +72,15 @@ api.interceptors.response.use(
         const newToken = await refreshAccessToken();
         err.config.headers.Authorization = `Bearer ${newToken}`;
         return api(err.config);
-      } catch {
+      } catch (refreshErr) {
+        if (!refreshErr.response && refreshErr.message !== 'No refresh token') {
+          return Promise.reject(err);
+        }
         clearSession();
+        sessionStorage.setItem(
+          'pg_notice',
+          refreshErr.response?.data?.message || 'You were signed out because your session ended. Please log in again.'
+        );
         goTo('/login', { replace: true });
         return Promise.reject(err);
       }
@@ -95,5 +103,9 @@ api.interceptors.response.use(
     return Promise.reject(err);
   }
 );
+
+export function mediaUrl(id) {
+  return id ? `${baseURL}/media/${id}` : '';
+}
 
 export default api;

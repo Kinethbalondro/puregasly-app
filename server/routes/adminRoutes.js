@@ -11,6 +11,7 @@ router.use(requireAuth, requireRole('admin'));
 router.get('/stats', c.stats);
 
 router.get('/stores', c.listStores);
+router.get('/stores/:id/documents/:docId', validateId('id'), validateId('docId'), c.downloadDocument);
 router.patch('/stores/:id/approve', validateId('id'), c.approveStore);
 router.patch('/stores/:id/reject', validateId('id'), c.rejectStore);
 router.patch('/stores/:id/ban', validateId('id'), c.banStore);

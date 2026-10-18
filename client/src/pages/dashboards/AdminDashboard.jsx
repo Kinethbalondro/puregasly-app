@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import api from '../../api/axios';
 import ReasonModal from '../../components/ReasonModal';
 import { errMsg, formatDateTime } from '../../utils/format';
+import StoreDocuments from '../../components/StoreDocuments';
 import RatingStars from '../../components/RatingStars';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -196,6 +197,7 @@ function Applications({ onChange }) {
                   Owner: {s.owner?.name} · {s.owner?.email}
                 </div>
                 <div className="muted small">Applied {formatDateTime(s.createdAt)}</div>
+                <StoreDocuments storeId={s.id} documents={s.documents} missingRequired={s.missingRequired} />
               </div>
               <div className="row-actions">
                 <button className="btn-solid small" onClick={() => approve(s.id)}>Approve</button>
@@ -290,6 +292,7 @@ function Stores({ onChange }) {
                       <p className="small">{s.appeal.message}</p>
                     </div>
                   )}
+                  <StoreDocuments storeId={s.id} documents={s.documents} missingRequired={s.missingRequired} />
                 </div>
                 <div className="row-actions">
                   {s.status === 'approved' && (

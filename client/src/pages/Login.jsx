@@ -5,8 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import usePageTitle from '../utils/usePageTitle';
 import Spinner from '../components/Spinner';
 import AuthVisual from '../components/AuthVisual';
+import { errMsg } from '../utils/format';
 
-// Eye icon button used inside the password fields (outline style)
 function EyeButton({ shown, onToggle }) {
   return (
     <button
@@ -62,9 +62,8 @@ export default function Login() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [error, setError] = useState('');
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  // Show/hide password toggles
   const [showPassword, setShowPassword] = useState(false);
   const [showNew, setShowNew] = useState(false);
 
@@ -78,6 +77,7 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setUnverifiedEmail('');
     setSubmitting(true);
 
     try {
@@ -96,7 +96,11 @@ export default function Login() {
       login(res.data.token, res.data.refreshToken, res.data.user);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not reach the server.');
+      // Password was right but the email was never verified: offer the code screen.
+      if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(err.response.data.email || email);
+      }
+      setError(errMsg(err));
     } finally {
       setSubmitting(false);
     }
@@ -214,19 +218,7 @@ export default function Login() {
 
               <p className="switch-link">
                 Not you?{' '}
-                <button
-                  type="button"
-                  onClick={handleCancelChange}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    font: 'inherit',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                  }}
-                >
+                <button type="button" className="link-btn" onClick={handleCancelChange}>
                   Back to log in
                 </button>
               </p>
@@ -238,7 +230,22 @@ export default function Login() {
 
               {statusMessage && <div className="message success">{statusMessage}</div>}
               {notice && <div className="message error">{notice}</div>}
-              {error && <div className="message error">{error}</div>}
+              {error && (
+                <div className="message error">
+                  {error}
+                  {unverifiedEmail && (
+                    <div>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => navigate('/register', { state: { verifyEmail: unverifiedEmail } })}
+                      >
+                        Enter your verification code →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit}>
                 <div className="field">
@@ -272,6 +279,9 @@ export default function Login() {
                     />
                     <EyeButton shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />
                   </div>
+                  <div className="forgot-row">
+                    <Link to="/forgot-password">Forgot password?</Link>
+                  </div>
                 </div>
                 <button type="submit" className="btn-primary" disabled={submitting}>
                   {submitting && <Spinner light />}{submitting ? 'Logging in...' : 'Log In'}
@@ -280,6 +290,9 @@ export default function Login() {
 
               <p className="switch-link">
                 Don't have an account? <Link to="/register">Sign up</Link>
+              </p>
+              <p className="switch-link small-link">
+                <Link to="/privacy">Privacy Policy</Link>
               </p>
             </>
           )}
