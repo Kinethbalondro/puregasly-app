@@ -7,8 +7,9 @@ import Spinner from '../components/Spinner';
 import { SkeletonRows } from '../components/Skeleton';
 import usePageTitle from '../utils/usePageTitle';
 import { errMsg } from '../utils/format';
+import LocationPicker from './LocationPicker';
 
-const BLANK = { label: '', address: '', contactNumber: '' };
+const BLANK = { label: '', address: '', contactNumber: '', lat: null, lng: null };
 
 export default function AddressBook() {
   usePageTitle('Addresses');
@@ -36,6 +37,10 @@ export default function AddressBook() {
   }
 
   const setF = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Pin position from the map
+  const hasPin = Number.isFinite(form.lat) && Number.isFinite(form.lng);
+  const pin = hasPin ? { lat: form.lat, lng: form.lng } : null;
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -110,6 +115,16 @@ export default function AddressBook() {
               <label>Full address</label>
               <textarea required rows={2} maxLength={250} value={form.address} onChange={setF('address')} />
             </div>
+            <div className="field span2">
+              <label>Pin your location (optional)</label>
+              <p className="muted small">
+                Pinning your exact spot helps the rider find you and lets you track your delivery better.
+              </p>
+              <LocationPicker
+                value={pin}
+                onChange={({ lat, lng }) => setForm((f) => ({ ...f, lat, lng }))}
+              />
+            </div>
           </div>
           <button type="submit" className="btn-solid" disabled={submitting}>
             {submitting && <Spinner light />}{submitting ? 'Saving...' : 'Save Address'}
@@ -130,6 +145,18 @@ export default function AddressBook() {
                 {a.isDefault && <span className="status-pill received">default</span>}
                 <div className="muted small">{a.address}</div>
                 <div className="muted small">📞 {a.contactNumber}</div>
+                {Number.isFinite(a.lat) && Number.isFinite(a.lng) && (
+                  <div className="muted small">
+                    📍 Location pinned ·{' '}
+                    <a
+                      href={`https://www.google.com/maps?q=${a.lat},${a.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View on map
+                    </a>
+                  </div>
+                )}
               </div>
               <div className="row-actions">
                 {!a.isDefault && (

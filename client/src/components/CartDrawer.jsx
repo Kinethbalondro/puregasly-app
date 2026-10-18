@@ -8,6 +8,56 @@ import Spinner from './Spinner';
 
 const NEW_ADDRESS = '__new__';
 
+// Delivery time slots: 2 hours each, Philippine time.
+const SLOT_START_HOURS = [6, 8, 10, 12, 14, 16, 18];
+const SLOT_MS = 2 * 60 * 60 * 1000;
+const MIN_LEAD_MS = 30 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const dateFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+const dayLabelFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Manila',
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+});
+const timeFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Manila',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+// The days (next 7) and time slots a customer can still pick right now.
+function buildDays() {
+  const now = Date.now();
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(now + i * DAY_MS);
+    const value = dateFmt.format(day); // e.g. 2026-10-19
+    const slots = SLOT_START_HOURS.map((h) => {
+      const start = new Date(`${value}T${String(h).padStart(2, '0')}:00:00+08:00`);
+      const end = new Date(start.getTime() + SLOT_MS);
+      return { hour: h, start, label: `${timeFmt.format(start)} - ${timeFmt.format(end)}` };
+    }).filter((s) => s.start.getTime() >= now + MIN_LEAD_MS);
+
+    if (slots.length > 0) {
+      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : dayLabelFmt.format(day);
+      days.push({ value, label, slots });
+    }
+  }
+  return days;
+}
+
+// Returns the number if it is a valid coordinate, otherwise null.
+function pinValue(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
 export default function CartDrawer() {
   const { cart, setQty, clear, total, open, setOpen } = useCart();
   const toast = useToast();
@@ -25,9 +75,16 @@ export default function CartDrawer() {
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [address, setAddress] = useState(saved.address || '');
   const [phone, setPhone] = useState(saved.phone || '');
+  // Map pin of the chosen saved address (null when typing a new address)
+  const [pin, setPin] = useState({ lat: null, lng: null });
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Delivery time: 'asap' or 'scheduled' (a day + a 2-hour slot)
+  const [timeType, setTimeType] = useState('asap');
+  const [slotDate, setSlotDate] = useState('');
+  const [slotHour, setSlotHour] = useState('');
 
   const [couponCode, setCouponCode] = useState('');
   const [coupon, setCoupon] = useState(null); // { code, discount }
@@ -54,6 +111,7 @@ export default function CartDrawer() {
           setSelectedAddressId(def.id);
           setAddress(def.address);
           setPhone(def.contactNumber);
+          setPin({ lat: pinValue(def.lat), lng: pinValue(def.lng) });
         } else if (res.data.length === 0) {
           setSelectedAddressId(NEW_ADDRESS);
         }
@@ -75,12 +133,14 @@ export default function CartDrawer() {
     if (id === NEW_ADDRESS) {
       setAddress('');
       setPhone('');
+      setPin({ lat: null, lng: null });
       return;
     }
     const a = savedAddresses.find((x) => x.id === id);
     if (a) {
       setAddress(a.address);
       setPhone(a.contactNumber);
+      setPin({ lat: pinValue(a.lat), lng: pinValue(a.lng) });
     }
   }
 
@@ -111,16 +171,34 @@ export default function CartDrawer() {
   }
 
   const finalTotal = Math.max(0, total - (coupon?.discount || 0));
+  const hasPin = pin.lat !== null && pin.lng !== null;
+
+  // Time slot choices (recomputed each render so past slots drop off).
+  const days = buildDays();
+  const selectedDay = days.find((d) => d.value === slotDate) || days[0] || null;
+  const selectedSlot = selectedDay
+    ? selectedDay.slots.find((s) => String(s.hour) === slotHour) || null
+    : null;
 
   async function placeOrder(e) {
     e.preventDefault();
     setError('');
+
+    if (timeType === 'scheduled' && !selectedSlot) {
+      setError('Please choose a delivery day and time slot, or pick ASAP.');
+      return;
+    }
+
     setBusy(true);
     try {
       await api.post('/orders', {
         items: cart.items.map((i) => ({ productId: i.productId, qty: i.qty })),
         deliveryAddress: address,
         contactNumber: phone,
+        deliveryLat: hasPin ? pin.lat : undefined,
+        deliveryLng: hasPin ? pin.lng : undefined,
+        deliveryTimeType: timeType,
+        scheduledFor: timeType === 'scheduled' ? selectedSlot.start.toISOString() : undefined,
         notes,
         couponCode: coupon?.code || undefined,
       });
@@ -129,6 +207,9 @@ export default function CartDrawer() {
       setNotes('');
       setCoupon(null);
       setCouponCode('');
+      setTimeType('asap');
+      setSlotDate('');
+      setSlotHour('');
       setOpen(false);
       toast('Order placed!');
       navigate('/orders');
@@ -235,6 +316,9 @@ export default function CartDrawer() {
                   ))}
                   <option value={NEW_ADDRESS}>+ Enter a new address</option>
                 </select>
+                {hasPin && selectedAddressId !== NEW_ADDRESS && (
+                  <p className="muted small" style={{ marginTop: 6 }}>📍 Map pin included</p>
+                )}
               </div>
             )}
 
@@ -244,6 +328,63 @@ export default function CartDrawer() {
                 <textarea id="addr" rows={2} required maxLength={250} value={address} onChange={(e) => setAddress(e.target.value)} />
               </div>
             )}
+
+            <div className="field">
+              <label>Delivery time</label>
+              <div className="tabs compact" style={{ marginBottom: 8 }}>
+                <button
+                  type="button"
+                  className={timeType === 'asap' ? 'active' : ''}
+                  onClick={() => setTimeType('asap')}
+                >
+                  ASAP
+                </button>
+                <button
+                  type="button"
+                  className={timeType === 'scheduled' ? 'active' : ''}
+                  onClick={() => setTimeType('scheduled')}
+                >
+                  Pick a time
+                </button>
+              </div>
+
+              {timeType === 'asap' ? (
+                <p className="muted small">The store will deliver as soon as possible.</p>
+              ) : selectedDay ? (
+                <>
+                  <select
+                    aria-label="Delivery day"
+                    value={selectedDay.value}
+                    onChange={(e) => {
+                      setSlotDate(e.target.value);
+                      setSlotHour('');
+                    }}
+                    style={{ marginBottom: 8 }}
+                  >
+                    {days.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Delivery time slot"
+                    value={selectedSlot ? String(selectedSlot.hour) : ''}
+                    onChange={(e) => setSlotHour(e.target.value)}
+                  >
+                    <option value="">Choose a time slot</option>
+                    {selectedDay.slots.map((s) => (
+                      <option key={s.hour} value={String(s.hour)}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <p className="muted small">No time slots are available right now. Please pick ASAP.</p>
+              )}
+            </div>
+
             <div className="field">
               <label htmlFor="phone">Contact number</label>
               <input id="phone" type="tel" required maxLength={20} value={phone} onChange={(e) => setPhone(e.target.value)} />

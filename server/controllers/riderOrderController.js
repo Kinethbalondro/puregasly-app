@@ -7,6 +7,7 @@ const { STATUS_LABELS } = require('../utils/orderStatus');
 
 const NEXT = { preparing: 'out_for_delivery', out_for_delivery: 'delivered' };
 
+// The rider never sees the code itself, only whether one is needed.
 function shape(o) {
   return {
     id: o._id,
@@ -18,6 +19,13 @@ function shape(o) {
     status: o.status,
     deliveryAddress: o.deliveryAddress,
     contactNumber: o.contactNumber,
+    deliveryLat: typeof o.deliveryLat === 'number' ? o.deliveryLat : null,
+    deliveryLng: typeof o.deliveryLng === 'number' ? o.deliveryLng : null,
+    deliveryTimeType: o.deliveryTimeType || 'asap',
+    scheduledFor: o.scheduledFor || null,
+    scheduledLabel: o.scheduledLabel || '',
+    requiresCode: !!o.deliveryCode,
+    deliveredAt: o.deliveredAt || null,
     notes: o.notes,
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
@@ -42,7 +50,7 @@ exports.list = async (req, res) => {
   }
 };
 
-// PATCH /api/rider-orders/:id/advance
+// PATCH /api/rider-orders/:id/advance   body: { code }  (code needed for the delivered step)
 exports.advance = async (req, res) => {
   try {
     const current = await Order.findOne({ _id: req.params.id, rider: req.userId });
@@ -53,9 +61,30 @@ exports.advance = async (req, res) => {
       return res.status(400).json({ message: 'This delivery cannot be moved forward any more.' });
     }
 
+    // Proof of delivery: the customer's 4-digit code is needed to mark it delivered.
+    // Older orders have no code, so they are not blocked.
+    if (next === 'delivered' && current.deliveryCode) {
+      const entered = String(req.body.code || '').trim();
+      if (!entered) {
+        return res.status(400).json({
+          code: 'CODE_REQUIRED',
+          message: 'Ask the customer for their 4-digit delivery code.',
+        });
+      }
+      if (entered !== current.deliveryCode) {
+        return res.status(400).json({
+          code: 'WRONG_CODE',
+          message: 'That code is not correct. Ask the customer to check their code in My Orders.',
+        });
+      }
+    }
+
+    const set = { status: next };
+    if (next === 'delivered') set.deliveredAt = new Date();
+
     const order = await Order.findOneAndUpdate(
       { _id: current._id, status: current.status },
-      { $set: { status: next }, $push: { statusHistory: { status: next, at: new Date() } } },
+      { $set: set, $push: { statusHistory: { status: next, at: new Date() } } },
       { new: true }
     )
       .populate('customer', 'name')

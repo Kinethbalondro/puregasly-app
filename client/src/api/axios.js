@@ -21,7 +21,7 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
-});
+})
 
 function clearSession() {
   localStorage.removeItem('pg_token');

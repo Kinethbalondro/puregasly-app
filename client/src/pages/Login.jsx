@@ -6,6 +6,47 @@ import usePageTitle from '../utils/usePageTitle';
 import Spinner from '../components/Spinner';
 import AuthVisual from '../components/AuthVisual';
 
+// Eye icon button used inside the password fields (outline style)
+function EyeButton({ shown, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={shown ? 'Hide password' : 'Show password'}
+      title={shown ? 'Hide password' : 'Show password'}
+      style={{
+        position: 'absolute',
+        right: 12,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        background: 'none',
+        border: 'none',
+        padding: 0,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        color: '#8a8f98',
+      }}
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+        <circle cx="12" cy="12" r="3" />
+        {shown && <line x1="3" y1="3" x2="21" y2="21" />}
+      </svg>
+    </button>
+  );
+}
+
 export default function Login() {
   usePageTitle('Log In');
   const navigate = useNavigate();
@@ -22,6 +63,10 @@ export default function Login() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Show/hide password toggles
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNew, setShowNew] = useState(false);
 
   const statusMessage = location.state?.status;
   const [notice] = useState(() => {
@@ -43,6 +88,7 @@ export default function Login() {
         setPendingToken(res.data.token);
         setNewPassword('');
         setConfirmNewPassword('');
+        setShowNew(false);
         setStep('change');
         return;
       }
@@ -96,6 +142,8 @@ export default function Login() {
     setNewPassword('');
     setConfirmNewPassword('');
     setPendingToken('');
+    setShowPassword(false);
+    setShowNew(false);
     setStep('login');
   }
 
@@ -122,10 +170,10 @@ export default function Login() {
               <form onSubmit={handleChangePassword}>
                 <div className="field">
                   <label htmlFor="newPassword">New password</label>
-                  <div className="field-icon-wrap">
+                  <div className="field-icon-wrap" style={{ position: 'relative' }}>
                     <span className="field-icon">🔒</span>
                     <input
-                      type="password"
+                      type={showNew ? 'text' : 'password'}
                       id="newPassword"
                       required
                       minLength={8}
@@ -133,15 +181,17 @@ export default function Login() {
                       placeholder="••••••••"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
+                      style={{ paddingRight: 44 }}
                     />
+                    <EyeButton shown={showNew} onToggle={() => setShowNew((s) => !s)} />
                   </div>
                 </div>
                 <div className="field">
                   <label htmlFor="confirmNewPassword">Confirm new password</label>
-                  <div className="field-icon-wrap">
+                  <div className="field-icon-wrap" style={{ position: 'relative' }}>
                     <span className="field-icon">🔒</span>
                     <input
-                      type="password"
+                      type={showNew ? 'text' : 'password'}
                       id="confirmNewPassword"
                       required
                       minLength={8}
@@ -149,7 +199,9 @@ export default function Login() {
                       placeholder="••••••••"
                       value={confirmNewPassword}
                       onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      style={{ paddingRight: 44 }}
                     />
+                    <EyeButton shown={showNew} onToggle={() => setShowNew((s) => !s)} />
                   </div>
                 </div>
                 <p className="muted small auth-note">
@@ -206,17 +258,19 @@ export default function Login() {
                 </div>
                 <div className="field">
                   <label htmlFor="password">Password</label>
-                  <div className="field-icon-wrap">
+                  <div className="field-icon-wrap" style={{ position: 'relative' }}>
                     <span className="field-icon">🔒</span>
                     <input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       id="password"
                       required
                       autoComplete="current-password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      style={{ paddingRight: 44 }}
                     />
+                    <EyeButton shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />
                   </div>
                 </div>
                 <button type="submit" className="btn-primary" disabled={submitting}>

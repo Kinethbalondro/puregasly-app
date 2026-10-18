@@ -26,6 +26,11 @@ const storeSchema = new mongoose.Schema(
     phone: { type: String, trim: true, default: '', maxlength: 30 },
     description: { type: String, trim: true, default: '', maxlength: 300 },
 
+    // Pinned map location of the store (optional). Used as the start of the
+    // delivery route shown to riders.
+    lat: { type: Number, default: null, min: -90, max: 90 },
+    lng: { type: Number, default: null, min: -180, max: 180 },
+
     // Re-appeal for a banned store.
     appeal: {
       status: { type: String, enum: ['none', 'pending', 'approved', 'denied'], default: 'none' },

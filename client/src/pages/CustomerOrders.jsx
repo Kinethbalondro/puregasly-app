@@ -16,6 +16,13 @@ const FILTERS = [
   { key: 'cancelled', label: 'Cancelled', match: (o) => o.status === 'cancelled' },
 ];
 
+// Text shown for when the customer asked for the delivery.
+const deliverWhen = (o) =>
+  o.deliveryTimeType === 'scheduled' && o.scheduledLabel ? o.scheduledLabel : 'ASAP';
+
+// The code is only needed while the order is on its way.
+const showCode = (o) => !!o.deliveryCode && ['preparing', 'out_for_delivery'].includes(o.status);
+
 export default function CustomerOrders() {
   usePageTitle('My Orders');
   const toast = useToast();
@@ -126,7 +133,30 @@ export default function CustomerOrders() {
                 )}
               </ul>
               <p className="muted small">📍 {o.deliveryAddress}</p>
+              <p className="muted small">
+                🕒 Deliver:{' '}
+                {o.deliveryTimeType === 'scheduled' ? <strong>{deliverWhen(o)}</strong> : deliverWhen(o)}
+              </p>
               {o.rider && <p className="muted small">🛵 Rider: {o.rider.name}</p>}
+
+              {showCode(o) && (
+                <div
+                  style={{
+                    margin: '10px 0',
+                    padding: '10px 12px',
+                    border: '1px dashed rgba(128,128,128,0.5)',
+                    borderRadius: 12,
+                  }}
+                >
+                  <div className="small">🔐 Your delivery code</div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 600, letterSpacing: '0.3em', margin: '4px 0' }}>
+                    {o.deliveryCode}
+                  </div>
+                  <div className="muted small">
+                    Give this code to the rider only when you receive your order. Do not share it before then.
+                  </div>
+                </div>
+              )}
 
               <div className="order-actions">
                 <span className={`status-pill ${o.status}`}>{o.status === 'pending' ? 'Waiting for store' : STATUS_LABELS[o.status]}</span>

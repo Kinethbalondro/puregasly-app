@@ -17,6 +17,38 @@ function useDebounced(value, ms = 300) {
   return v;
 }
 
+// The PROMO badge and the heart sit inside the card's top row,
+// so they never overlap each other or the Add to cart button.
+const PROMO_BADGE = {
+  position: 'static',
+  top: 'auto',
+  right: 'auto',
+  bottom: 'auto',
+  left: 'auto',
+  transform: 'none',
+  clipPath: 'none',
+  width: 'auto',
+  height: 'auto',
+  margin: 0,
+  padding: '2px 8px',
+  borderRadius: 999,
+  display: 'inline-block',
+  fontSize: 11,
+  lineHeight: 1.5,
+  whiteSpace: 'nowrap',
+  zIndex: 'auto',
+};
+
+const FAV_INLINE = {
+  position: 'static',
+  top: 'auto',
+  right: 'auto',
+  bottom: 'auto',
+  left: 'auto',
+  margin: 0,
+  flexShrink: 0,
+};
+
 export function ProductCard({ p, onOpenStore }) {
   const { addItem } = useCart();
   const favorites = useFavorites();
@@ -25,20 +57,34 @@ export function ProductCard({ p, onOpenStore }) {
 
   return (
     <div className={`product-card ${out ? 'is-out' : ''}`}>
-      {p.onPromo && <span className="ribbon">PROMO</span>}
-      <button
-        className={`fav-btn ${faved ? 'faved' : ''}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          favorites?.toggle('product', p.id);
-        }}
-        aria-label={faved ? 'Remove from favorites' : 'Add to favorites'}
+      <div
+        className="product-top"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
       >
-        {faved ? '❤️' : '🤍'}
-      </button>
-      <div className="product-top">
         <span className="cat-tag">{CATEGORY_LABELS[p.category] || 'LPG'}</span>
-        <span className="muted small">{p.sold} sold</span>
+
+        {/* Right side: sold count, then PROMO, then the heart (PROMO sits just left of the heart) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span className="muted small" style={{ whiteSpace: 'nowrap' }}>
+            {p.sold} sold
+          </span>
+          {p.onPromo && (
+            <span className="ribbon" style={PROMO_BADGE}>
+              PROMO
+            </span>
+          )}
+          <button
+            className={`fav-btn ${faved ? 'faved' : ''}`}
+            style={FAV_INLINE}
+            onClick={(e) => {
+              e.stopPropagation();
+              favorites?.toggle('product', p.id);
+            }}
+            aria-label={faved ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            {faved ? '❤️' : '🤍'}
+          </button>
+        </div>
       </div>
       <h3>{p.name}</h3>
       <p className="muted small">{[p.brand, p.sizeKg ? `${p.sizeKg} kg` : null].filter(Boolean).join(' · ') || '—'}</p>

@@ -12,8 +12,47 @@ const { claimCoupon } = require('../utils/coupons');
 
 const PHONE_REGEX = /^[0-9+()\-\s]{7,20}$/;
 
+// Delivery time slots: each slot is 2 hours long, up to 7 days ahead,
+// and must start at least 30 minutes from now.
+const SLOT_HOURS = 2;
+const MIN_LEAD_MS = 30 * 60 * 1000;
+const MAX_AHEAD_MS = 7 * 24 * 60 * 60 * 1000;
+
+const dateTimeFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Manila',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+const timeFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Manila',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+// e.g. "Oct 19, 2026, 9:00 AM - 11:00 AM" (always in Philippine time)
+function slotLabel(start) {
+  const end = new Date(start.getTime() + SLOT_HOURS * 60 * 60 * 1000);
+  return `${dateTimeFmt.format(start)} - ${timeFmt.format(end)}`;
+}
+
 function newOrderNo() {
   return 'PG-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
+// 4-digit proof-of-delivery code (1000-9999). Only the customer sees it.
+function newDeliveryCode() {
+  return String(crypto.randomInt(1000, 10000));
+}
+
+// Returns a valid coordinate number, or null if missing / out of range.
+function cleanCoord(value, limit) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || Math.abs(n) > limit) return null;
+  return n;
 }
 
 function shapeOrder(o, storeName) {
@@ -31,6 +70,13 @@ function shapeOrder(o, storeName) {
     statusHistory: o.statusHistory,
     deliveryAddress: o.deliveryAddress,
     contactNumber: o.contactNumber,
+    deliveryLat: typeof o.deliveryLat === 'number' ? o.deliveryLat : null,
+    deliveryLng: typeof o.deliveryLng === 'number' ? o.deliveryLng : null,
+    deliveryTimeType: o.deliveryTimeType || 'asap',
+    scheduledFor: o.scheduledFor || null,
+    scheduledLabel: o.scheduledLabel || '',
+    deliveryCode: o.deliveryCode || '',
+    deliveredAt: o.deliveredAt || null,
     notes: o.notes,
     paymentMethod: o.paymentMethod,
     rider: o.rider && o.rider.name ? { id: o.rider._id, name: o.rider.name } : null,
@@ -40,10 +86,22 @@ function shapeOrder(o, storeName) {
   };
 }
 
-// POST /api/orders   body: { items:[{productId, qty}], deliveryAddress, contactNumber, notes }
+// POST /api/orders
+// body: { items:[{productId, qty}], deliveryAddress, contactNumber, notes, deliveryLat, deliveryLng,
+//         deliveryTimeType: 'asap' | 'scheduled', scheduledFor: ISO date string (start of the slot) }
 exports.create = async (req, res) => {
   try {
-    const { items, deliveryAddress, contactNumber, notes, couponCode } = req.body;
+    const {
+      items,
+      deliveryAddress,
+      contactNumber,
+      notes,
+      couponCode,
+      deliveryLat,
+      deliveryLng,
+      deliveryTimeType,
+      scheduledFor,
+    } = req.body;
 
     if (!Array.isArray(items) || items.length === 0 || items.length > 20) {
       return res.status(400).json({ message: 'Your cart is empty (or has too many items).' });
@@ -56,6 +114,35 @@ exports.create = async (req, res) => {
     }
     if (!PHONE_REGEX.test(phone)) {
       return res.status(400).json({ message: 'Please enter a valid contact number.' });
+    }
+
+    // The map pin is optional. Both values must be valid, or neither is kept.
+    let lat = cleanCoord(deliveryLat, 90);
+    let lng = cleanCoord(deliveryLng, 180);
+    if (lat === null || lng === null) {
+      lat = null;
+      lng = null;
+    }
+
+    // Delivery time: ASAP (default) or a chosen time slot.
+    let timeType = 'asap';
+    let slotStart = null;
+    let slotText = '';
+    if (deliveryTimeType === 'scheduled') {
+      const start = new Date(scheduledFor);
+      if (!scheduledFor || Number.isNaN(start.getTime())) {
+        return res.status(400).json({ message: 'Please choose a valid delivery time.' });
+      }
+      const now = Date.now();
+      if (start.getTime() < now + MIN_LEAD_MS) {
+        return res.status(400).json({ message: 'That delivery time is too soon. Please pick a later time slot.' });
+      }
+      if (start.getTime() > now + MAX_AHEAD_MS) {
+        return res.status(400).json({ message: 'You can only schedule a delivery up to 7 days ahead.' });
+      }
+      timeType = 'scheduled';
+      slotStart = start;
+      slotText = slotLabel(start);
     }
 
     // Merge duplicate lines and validate quantities.
@@ -132,6 +219,12 @@ exports.create = async (req, res) => {
         statusHistory: [{ status: 'pending', at: new Date() }],
         deliveryAddress: address,
         contactNumber: phone,
+        deliveryLat: lat,
+        deliveryLng: lng,
+        deliveryTimeType: timeType,
+        scheduledFor: slotStart,
+        scheduledLabel: slotText,
+        deliveryCode: newDeliveryCode(),
         notes: String(notes || '').trim().slice(0, 200),
       });
     } catch (err) {
@@ -146,7 +239,7 @@ exports.create = async (req, res) => {
     notifyStoreStaff(store._id, 'manage_orders', {
       type: 'order_placed',
       title: `New order ${order.orderNo}`,
-      message: `${orderItems.length} item(s) · ₱${total.toFixed(2)}`,
+      message: `${orderItems.length} item(s) · ₱${total.toFixed(2)} · ${timeType === 'scheduled' ? slotText : 'ASAP'}`,
       link: '/store-orders',
     });
 

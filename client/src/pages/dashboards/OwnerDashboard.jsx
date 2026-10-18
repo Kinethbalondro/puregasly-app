@@ -4,6 +4,7 @@ import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import { errMsg, formatPHP, formatDateTime, STATUS_LABELS } from '../../utils/format';
 import { SkeletonRows } from '../../components/Skeleton';
+import LocationPicker from '../LocationPicker';
 import usePageTitle from '../../utils/usePageTitle';
 
 export default function OwnerDashboard({ user }) {
@@ -15,6 +16,12 @@ export default function OwnerDashboard({ user }) {
   const [address, setAddress] = useState(user.store?.address || '');
   const [phone, setPhone] = useState(user.store?.phone || '');
   const [description, setDescription] = useState(user.store?.description || '');
+  // Map pin of the store: { lat, lng } or null
+  const [pin, setPin] = useState(
+    typeof user.store?.lat === 'number' && typeof user.store?.lng === 'number'
+      ? { lat: user.store.lat, lng: user.store.lng }
+      : null
+  );
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [saving, setSaving] = useState(false);
 
@@ -31,7 +38,13 @@ export default function OwnerDashboard({ user }) {
     setSaving(true);
     setMsg({ type: '', text: '' });
     try {
-      await api.patch('/store/profile', { address, phone, description });
+      await api.patch('/store/profile', {
+        address,
+        phone,
+        description,
+        lat: pin ? pin.lat : null,
+        lng: pin ? pin.lng : null,
+      });
       await refresh();
       setMsg({ type: 'success', text: 'Store profile saved.' });
     } catch (err) {
@@ -118,6 +131,15 @@ export default function OwnerDashboard({ user }) {
           <div className="field"><label>Phone</label><input maxLength={30} value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
           <div className="field span2"><label>Short description</label><input maxLength={300} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
         </div>
+
+        <div className="field" style={{ marginTop: 12 }}>
+          <label>Store location (pin on the map)</label>
+          <p className="muted small" style={{ marginBottom: 8 }}>
+            Riders use this as the starting point of the delivery route.
+          </p>
+          <LocationPicker value={pin} onChange={setPin} height={280} />
+        </div>
+
         <button className="btn-solid" disabled={saving}>{saving ? 'Saving...' : 'Save profile'}</button>
       </form>
     </>
