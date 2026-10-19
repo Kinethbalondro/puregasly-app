@@ -43,6 +43,7 @@ export default function ManageEmployees() {
     try {
       const res = await api.get('/employees');
       setEmployees(res.data);
+      setError('');
     } catch (err) {
       setError(err.response?.data?.message || 'Could not load employees.');
     } finally {
@@ -58,12 +59,26 @@ export default function ManageEmployees() {
 
   async function handleAddEmployee(e) {
     e.preventDefault();
+    if (submitting) return; // ignore a second click while the first one is still running
+
     setFormError('');
     setCreated(null);
     setSubmitting(true);
 
+    // Step 1: create the employee on the server. Only a failure here is a real "could not add" error.
+    let res;
     try {
-      const res = await api.post('/employees', { name, email, permissions });
+      res = await api.post('/employees', { name, email, permissions });
+    } catch (err) {
+      console.error('Add employee failed:', err);
+      setFormError(err.response?.data?.message || 'Could not add employee.');
+      setSubmitting(false);
+      return;
+    }
+
+    // Step 2: the employee is saved now. Everything below is just updating the screen,
+    // so a problem here must not show up as an "add failed" error.
+    try {
       setCreated({
         name: res.data.name,
         email: res.data.email,
@@ -73,9 +88,9 @@ export default function ManageEmployees() {
       setEmail('');
       setPermissions([]);
       toast('Employee added.');
-      loadEmployees();
+      await loadEmployees();
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Could not add employee.');
+      console.error('Employee was added, but updating the screen failed:', err);
     } finally {
       setSubmitting(false);
     }
@@ -195,6 +210,7 @@ export default function ManageEmployees() {
                     padding: '8px 12px',
                     borderRadius: 8,
                     background: '#ffffff',
+                    color: '#111827',
                     border: '1px solid #d1d5db',
                     fontSize: '1.1rem',
                     letterSpacing: '0.08em',
@@ -211,6 +227,7 @@ export default function ManageEmployees() {
                     borderRadius: 8,
                     border: '1px solid #d1d5db',
                     background: '#ffffff',
+                    color: '#111827',
                     cursor: 'pointer',
                     font: 'inherit',
                   }}
@@ -225,6 +242,7 @@ export default function ManageEmployees() {
                     borderRadius: 8,
                     border: 'none',
                     background: 'transparent',
+                    color: '#166534',
                     cursor: 'pointer',
                     font: 'inherit',
                     textDecoration: 'underline',

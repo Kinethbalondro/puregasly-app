@@ -44,11 +44,25 @@ export default function ManageRiders() {
 
   async function handleAdd(e) {
     e.preventDefault();
+    if (submitting) return; // ignore a second click while the first one is still running
+
     setFormError('');
     setCreated(null);
     setSubmitting(true);
+
+    // Step 1: create the rider on the server. Only a failure here is a real "could not add" error.
+    let res;
     try {
-      const res = await api.post('/riders', { name, email });
+      res = await api.post('/riders', { name, email });
+    } catch (err) {
+      setFormError(errMsg(err, 'Could not add rider.'));
+      setSubmitting(false);
+      return;
+    }
+
+    // Step 2: the rider is saved now. Everything below is just updating the screen,
+    // so a problem here must not show up as an "add failed" error.
+    try {
       setCreated({
         name: res.data.name,
         email: res.data.email,
@@ -57,9 +71,9 @@ export default function ManageRiders() {
       setName('');
       setEmail('');
       toast('Rider added.');
-      load();
+      await load();
     } catch (err) {
-      setFormError(errMsg(err, 'Could not add rider.'));
+      console.error('Rider was added, but updating the screen failed:', err);
     } finally {
       setSubmitting(false);
     }
@@ -144,6 +158,7 @@ export default function ManageRiders() {
                 padding: '8px 12px',
                 borderRadius: 8,
                 background: '#ffffff',
+                color: '#111827',
                 border: '1px solid #d1d5db',
                 fontSize: '1.1rem',
                 letterSpacing: '0.08em',
@@ -160,6 +175,7 @@ export default function ManageRiders() {
                 borderRadius: 8,
                 border: '1px solid #d1d5db',
                 background: '#ffffff',
+                color: '#111827',
                 cursor: 'pointer',
                 font: 'inherit',
               }}
@@ -174,6 +190,7 @@ export default function ManageRiders() {
                 borderRadius: 8,
                 border: 'none',
                 background: 'transparent',
+                color: '#166534',
                 cursor: 'pointer',
                 font: 'inherit',
                 textDecoration: 'underline',
