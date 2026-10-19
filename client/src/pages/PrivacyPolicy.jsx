@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import usePageTitle from '../utils/usePageTitle';
 
@@ -77,6 +77,16 @@ export default function PrivacyPolicy() {
   usePageTitle('Privacy Policy');
   const { user } = useAuth();
   const home = user ? '/dashboard' : '/login';
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Go back to the page the person came from. If they opened this page
+  // directly (no history inside the app), fall back to home.
+  const goBack = (e) => {
+    e.preventDefault();
+    if (location.key !== 'default') navigate(-1);
+    else navigate(home);
+  };
 
   return (
     <div className="policy-page">
@@ -85,7 +95,7 @@ export default function PrivacyPolicy() {
           <img src="/assets/logo.png" alt="PureGasly logo" />
           <span>PureGasly</span>
         </Link>
-        <Link to={home} className="btn-ghost small">← Back<span className="hide-xs"> to PureGasly</span></Link>
+        <Link to={home} onClick={goBack} className="btn-ghost small">← Back<span className="hide-xs"> to PureGasly</span></Link>
       </header>
 
       <main className="policy-body">
