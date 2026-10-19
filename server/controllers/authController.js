@@ -57,13 +57,13 @@ async function sendOtp(user, purpose = 'signup', to = user.email) {
 
   // Testing only: show the code in the server terminal (never in production).
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`[DEV] ${purpose} code for ${to}: ${otp}`);
+    console.log(`[DEV] ${purpose} code for ${to}: ${otp} - authController.js:60`);
   }
 
   try {
     await sendEmail(to, OTP_EMAILS[purpose].subject, OTP_EMAILS[purpose].body(otp));
   } catch (err) {
-    console.error('Could not send OTP email:', err.message);
+    console.error('Could not send OTP email: - authController.js:66', err.message);
     // In production a failed email is a real error. While testing, the code in the terminal is enough.
     if (process.env.NODE_ENV === 'production') {
       throw Object.assign(new Error('EMAIL_SEND_FAILED'), { code: 'EMAIL_SEND_FAILED' });
@@ -227,7 +227,7 @@ exports.register = async (req, res) => {
       }
     }
 
-    const existing = await User.findOne({ email: normalizedEmail });
+    let existing = await User.findOne({ email: normalizedEmail });
 
     // Signed up before but never verified: send a fresh code. The name and password
     // are replaced with what was just submitted - otherwise someone could register
@@ -242,6 +242,14 @@ exports.register = async (req, res) => {
         otpRequired: true,
         email: existing.email,
       });
+    }
+
+    // A never-verified customer attempt is not a real account yet. If the same
+    // email now signs up as a store owner, clear the old attempt instead of
+    // saying the email already exists.
+    if (existing && existing.emailVerified === false && role === 'owner' && existing.role === 'customer') {
+      await User.deleteOne({ _id: existing._id });
+      existing = null;
     }
 
     if (existing) {
@@ -291,8 +299,16 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Customers only: send the email OTP.
-    await sendOtp(user);
+    // Customers only: send the email OTP. If the email can't be sent, remove the
+    // new account so the email is not counted as taken when they try again.
+    try {
+      await sendOtp(user);
+    } catch (otpErr) {
+      if (otpErr.code === 'EMAIL_SEND_FAILED') {
+        await User.deleteOne({ _id: user._id });
+      }
+      throw otpErr;
+    }
 
     return res.status(201).json({
       message: 'We sent a 6-digit code to your email.',
@@ -602,12 +618,12 @@ exports.logoutAll = async (req, res) => {
     console.error(err);
     return res.status(500).json({ message: 'Something went wrong.' });
   }
-}
+};
 
 // Tells the person by email that something about their account changed. Never
 // blocks or fails the request - it is only a heads-up in case it wasn't them.
 function notifyByEmail(to, subject, text) {
-  sendEmail(to, subject, text).catch((err) => console.error('Could not send notice email:', err.message));
+  sendEmail(to, subject, text).catch((err) => console.error('Could not send notice email: - authController.js:626', err.message));
 }
 
 const EMAIL_SEND_FAILED_MESSAGE = "We couldn't send the email right now. Please try again in a few minutes.";
