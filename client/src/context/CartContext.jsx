@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { useConfirm } from './ConfirmContext';
+import { useToast } from './ToastContext';
 
 const CartContext = createContext(null);
 
@@ -9,6 +10,9 @@ const empty = { store: null, items: [] };
 export function CartProvider({ children }) {
   const { user } = useAuth();
   const confirmDialog = useConfirm();
+  const toastCtx = useToast();
+  // Works whether useToast() returns a function or an object with .toast
+  const notify = typeof toastCtx === 'function' ? toastCtx : toastCtx?.toast;
   const key = user?.role === 'customer' ? `pg_cart_${user.id}` : null;
 
   const [cart, setCart] = useState(empty);
@@ -31,18 +35,29 @@ export function CartProvider({ children }) {
     if (key) localStorage.setItem(key, JSON.stringify(cart));
   }, [key, cart]);
 
+  function announce(product) {
+    if (notify) notify(`Added to cart: ${product.name}`);
+  }
+
   async function addItem(product, qty = 1) {
+    // Nothing to add if the product is out of stock.
+    if (!product.stock || product.stock <= 0) return;
+
+    // A cart can only hold items from one store (an order belongs to one store).
+    // Warn clearly before clearing the current cart.
     if (cart.store && cart.store.id !== product.storeId) {
+      const itemCount = cart.items.reduce((n, i) => n + i.qty, 0);
+      const itemWord = itemCount === 1 ? 'item' : 'items';
       const ok = await confirmDialog(
-        `Your cart has items from ${cart.store.name}. Starting a new cart with ${product.storeName || 'this store'} will clear it.`,
-        { title: 'Start a new cart?', confirmLabel: 'Start New Cart', danger: false }
+        `Your cart has ${itemCount} ${itemWord} from ${cart.store.name}. An order can only be from one store, so adding this from ${product.storeName || 'another store'} will remove them. Continue?`,
+        { title: 'Replace your cart?', confirmLabel: 'Clear cart & add', danger: false }
       );
       if (!ok) return;
       setCart({
         store: { id: product.storeId, name: product.storeName },
         items: [line(product, Math.min(qty, product.stock))],
       });
-      setOpen(true);
+      announce(product);
       return;
     }
 
@@ -55,7 +70,7 @@ export function CartProvider({ children }) {
         : [...prev.items, line(product, Math.min(qty, product.stock))];
       return { store: { id: product.storeId, name: product.storeName }, items };
     });
-    setOpen(true);
+    announce(product);
   }
 
   function setQty(productId, qty) {

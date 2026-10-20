@@ -259,9 +259,20 @@ export default function StoreOrders() {
 
             {counts[status] > 0 && (
               <span
-                className={`tab-count ${
-                  status === 'pending' ? 'hot' : ''
-                }`}
+                className={`tab-count ${status === 'pending' ? 'hot' : ''}`}
+                style={{
+                  display: 'inline-block',
+                  marginLeft: 6,
+                  minWidth: 22,
+                  padding: '1px 8px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  lineHeight: '18px',
+                  textAlign: 'center',
+                  color: '#fff',
+                  background: status === 'pending' ? '#e03131' : '#3b5bdb',
+                }}
               >
                 {counts[status]}
               </span>

@@ -16,6 +16,8 @@ const productSchema = new mongoose.Schema(
     sold: { type: Number, min: 0, default: 0 },
     // Inactive products are hidden from customers but kept in inventory.
     active: { type: Boolean, default: true },
+    // Product photo (Media id). Served from /api/media/:id
+    image: { type: mongoose.Schema.Types.ObjectId, ref: 'Media', default: null },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

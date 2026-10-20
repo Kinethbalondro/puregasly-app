@@ -1,7 +1,11 @@
+const mongoose = require('mongoose');
 const Store = require('../models/Store');
 const Product = require('../models/Product');
 const Review = require('../models/Review');
 const { escapeRegex } = require('../utils/helpers');
+
+// Query-string values can be arrays or objects (?a[b]=c). Only accept plain text.
+const asString = (v) => (typeof v === 'string' ? v : '');
 
 const PRODUCT_SORTS = {
   price_asc: (a, b) => a.effectivePrice - b.effectivePrice,
@@ -26,8 +30,18 @@ function shapeProduct(p, storeName) {
     onPromo: p.onPromo,
     stock: p.stock,
     sold: p.sold || 0,
+    image: p.image ? String(p.image) : null,
     createdAt: p.createdAt,
   };
+}
+
+// The store's cover picture = the photo of its best-selling product that has one.
+// Returns the Media id as text, or null when no product has a photo yet.
+function coverImageOf(productList) {
+  const withPhoto = productList
+    .filter((p) => p.image)
+    .sort((a, b) => (b.sold || 0) - (a.sold || 0))[0];
+  return withPhoto ? String(withPhoto.image) : null;
 }
 
 async function approvedStores(search) {
@@ -48,11 +62,14 @@ async function ratingsFor(storeIds) {
 }
 
 // GET /api/shop/stores?search=&sort=&promo=true
-// sort: name | price_asc | price_desc | sales_desc | sales_asc
+// sort: name | price_asc | price_desc | sales_desc | sales_asc | rating_desc
 exports.listStores = async (req, res) => {
   try {
-    const { search = '', sort = 'name', promo } = req.query;
-    const stores = await approvedStores(String(search).trim().slice(0, 60));
+    const search = asString(req.query.search);
+    const sort = asString(req.query.sort) || 'name';
+    const promo = asString(req.query.promo);
+
+    const stores = await approvedStores(search.trim().slice(0, 60));
     const products = await Product.find({
       storeId: { $in: stores.map((s) => s._id) },
       active: { $ne: false },
@@ -74,6 +91,7 @@ exports.listStores = async (req, res) => {
         address: s.address,
         phone: s.phone,
         description: s.description,
+        coverImage: coverImageOf(list),
         productCount: list.length,
         minPrice: prices.length ? Math.min(...prices) : null,
         maxPrice: prices.length ? Math.max(...prices) : null,
@@ -122,6 +140,10 @@ exports.listStores = async (req, res) => {
 // GET /api/shop/stores/:id
 exports.getStore = async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ message: 'Store not found.' });
+    }
+
     const store = await Store.findOne({ _id: req.params.id, status: 'approved' });
     if (!store) return res.status(404).json({ message: 'Store not found.' });
 
@@ -142,6 +164,7 @@ exports.getStore = async (req, res) => {
         address: store.address,
         phone: store.phone,
         description: store.description,
+        coverImage: coverImageOf(products),
         avgRating: rating.avgRating,
         reviewCount: rating.reviewCount,
       },
@@ -163,16 +186,22 @@ exports.getStore = async (req, res) => {
 // GET /api/shop/products?search=&sort=&promo=true&category=&minPrice=&maxPrice=&storeId=
 exports.listProducts = async (req, res) => {
   try {
-    const { search = '', sort = 'price_asc', promo, category, minPrice, maxPrice, storeId } = req.query;
+    const search = asString(req.query.search);
+    const sort = asString(req.query.sort) || 'price_asc';
+    const promo = asString(req.query.promo);
+    const category = asString(req.query.category);
+    const minPrice = asString(req.query.minPrice);
+    const maxPrice = asString(req.query.maxPrice);
+    const storeId = asString(req.query.storeId);
 
     const stores = await Store.find({ status: 'approved' }).select('name');
     const storeNames = new Map(stores.map((s) => [String(s._id), s.name]));
 
     const filter = { storeId: { $in: stores.map((s) => s._id) }, active: { $ne: false } };
-    if (storeId && storeNames.has(String(storeId))) filter.storeId = storeId;
+    if (storeId && storeNames.has(storeId)) filter.storeId = storeId;
     if (['lpg', 'refill', 'accessory'].includes(category)) filter.category = category;
 
-    const term = String(search).trim().slice(0, 60);
+    const term = search.trim().slice(0, 60);
     if (term) {
       const rx = { $regex: escapeRegex(term), $options: 'i' };
       filter.$or = [{ name: rx }, { brand: rx }];
@@ -181,14 +210,17 @@ exports.listProducts = async (req, res) => {
     let products = await Product.find(filter);
 
     if (promo === 'true') products = products.filter((p) => p.onPromo);
-    if (minPrice !== undefined && minPrice !== '' && !Number.isNaN(Number(minPrice))) {
+    if (minPrice !== '' && !Number.isNaN(Number(minPrice))) {
       products = products.filter((p) => p.effectivePrice >= Number(minPrice));
     }
-    if (maxPrice !== undefined && maxPrice !== '' && !Number.isNaN(Number(maxPrice))) {
+    if (maxPrice !== '' && !Number.isNaN(Number(maxPrice))) {
       products = products.filter((p) => p.effectivePrice <= Number(maxPrice));
     }
 
-    products.sort(PRODUCT_SORTS[sort] || PRODUCT_SORTS.price_asc);
+    const sorter = Object.prototype.hasOwnProperty.call(PRODUCT_SORTS, sort)
+      ? PRODUCT_SORTS[sort]
+      : PRODUCT_SORTS.price_asc;
+    products.sort(sorter);
 
     return res.json(products.map((p) => shapeProduct(p, storeNames.get(String(p.storeId)))));
   } catch (err) {

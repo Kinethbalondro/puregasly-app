@@ -15,6 +15,46 @@ function stockState(p) {
   return 'ok';
 }
 
+// URL of a stored photo (served by GET /api/media/:id).
+function mediaUrl(id) {
+  const base = String(api.defaults.baseURL || '/api').replace(/\/$/, '');
+  return `${base}/media/${id}`;
+}
+
+// Shrinks a photo in the browser so it stays under the 3 MB server limit.
+function shrinkImage(file, maxSide = 1000) {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) return resolve(file);
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => resolve(blob ? new File([blob], 'product.jpg', { type: 'image/jpeg' }) : file),
+        'image/jpeg',
+        0.85
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+}
+
+async function uploadProductImage(productId, file) {
+  const small = await shrinkImage(file);
+  const fd = new FormData();
+  fd.append('image', small);
+  return api.post(`/inventory/${productId}/image`, fd);
+}
+
 export default function ManageInventory() {
   usePageTitle('Inventory');
   const toast = useToast();
@@ -25,9 +65,11 @@ export default function ManageInventory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState(null);
+  const [photoBusyId, setPhotoBusyId] = useState(null);
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(BLANK);
+  const [formPhoto, setFormPhoto] = useState(null);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -61,7 +103,7 @@ export default function ManageInventory() {
     setFormError('');
     setSubmitting(true);
     try {
-      await api.post('/inventory', {
+      const res = await api.post('/inventory', {
         ...form,
         sizeKg: form.sizeKg === '' ? '' : Number(form.sizeKg),
         price: Number(form.price),
@@ -69,14 +111,59 @@ export default function ManageInventory() {
         stock: form.stock === '' ? 0 : Number(form.stock),
         lowStockAt: form.lowStockAt === '' ? 5 : Number(form.lowStockAt),
       });
+
+      let photoFailed = false;
+      if (formPhoto) {
+        try {
+          await uploadProductImage(res.data._id, formPhoto);
+        } catch (err) {
+          photoFailed = true;
+        }
+      }
+
       setForm(BLANK);
+      setFormPhoto(null);
       setShowForm(false);
-      toast('Product added.');
+      toast(photoFailed ? 'Product added, but the photo could not be uploaded. Try again from the list.' : 'Product added.');
       load();
     } catch (err) {
       setFormError(errMsg(err, 'Could not add product.'));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handlePhotoPick(p, e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setPhotoBusyId(p._id);
+    try {
+      await uploadProductImage(p._id, file);
+      toast('Photo saved.');
+      load();
+    } catch (err) {
+      toast(errMsg(err, 'Could not upload photo.'), { type: 'error' });
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
+
+  async function handlePhotoRemove(p) {
+    const ok = await confirmDialog('Remove the photo of this product?', {
+      title: 'Remove photo?',
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
+    setPhotoBusyId(p._id);
+    try {
+      await api.delete(`/inventory/${p._id}/image`);
+      toast('Photo removed.');
+      load();
+    } catch (err) {
+      toast(errMsg(err, 'Could not remove photo.'), { type: 'error' });
+    } finally {
+      setPhotoBusyId(null);
     }
   }
 
@@ -196,6 +283,12 @@ export default function ManageInventory() {
               <input type="number" min="0" step="1" value={form.stock} onChange={setF('stock')} /></div>
             <div className="field"><label>Low-stock alert at</label>
               <input type="number" min="0" step="1" value={form.lowStockAt} onChange={setF('lowStockAt')} /></div>
+            <div className="field"><label>Photo (optional)</label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => setFormPhoto((e.target.files && e.target.files[0]) || null)}
+              /></div>
           </div>
           <button type="submit" className="btn-solid" disabled={submitting}>{submitting && <Spinner light />}{submitting ? 'Adding...' : 'Add Product'}</button>
         </form>
@@ -234,12 +327,60 @@ export default function ManageInventory() {
                 {shown.map((p) => {
                   const st = stockState(p);
                   const d = drafts[p._id] || {};
+                  const busy = photoBusyId === p._id;
                   return (
                     <tr key={p._id} className={p.active === false ? 'row-muted' : ''}>
                       <td>
-                        <strong>{p.name}</strong>
-                        <div className="muted small">
-                          {[CATEGORY_LABELS[p.category] || 'LPG Tank', p.brand, p.sizeKg ? `${p.sizeKg} kg` : null].filter(Boolean).join(' · ')}
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          {p.image ? (
+                            <img
+                              src={mediaUrl(p.image)}
+                              alt={p.name}
+                              style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 56, height: 56, borderRadius: 8, flexShrink: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 24, background: 'var(--border)',
+                              }}
+                            >
+                              🛢️
+                            </div>
+                          )}
+                          <div>
+                            <strong>{p.name}</strong>
+                            <div className="muted small">
+                              {[CATEGORY_LABELS[p.category] || 'LPG Tank', p.brand, p.sizeKg ? `${p.sizeKg} kg` : null].filter(Boolean).join(' · ')}
+                            </div>
+                            <div className="small" style={{ marginTop: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
+                              {busy ? (
+                                <span className="muted">Working...</span>
+                              ) : (
+                                <>
+                                  <label style={{ cursor: 'pointer', textDecoration: 'underline' }}>
+                                    {p.image ? 'Change photo' : 'Add photo'}
+                                    <input
+                                      type="file"
+                                      accept="image/jpeg,image/png,image/webp"
+                                      style={{ display: 'none' }}
+                                      onChange={(e) => handlePhotoPick(p, e)}
+                                    />
+                                  </label>
+                                  {p.image && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePhotoRemove(p)}
+                                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline', color: 'inherit' }}
+                                    >
+                                      Remove photo
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td><input type="number" min="0" step="0.01" value={d.price ?? ''} onChange={(e) => setDraft(p._id, 'price', e.target.value)} /></td>

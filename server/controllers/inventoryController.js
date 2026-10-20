@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const { saveImage, deleteMedia } = require('../utils/media');
 
 const CATEGORIES = ['lpg', 'refill', 'accessory'];
 
@@ -128,6 +129,49 @@ exports.update = async (req, res) => {
   }
 };
 
+// POST /api/inventory/:id/image   (multipart field "image")
+exports.setImage = async (req, res) => {
+  try {
+    const product = await Product.findOne({ _id: req.params.id, storeId: req.currentUser.storeId });
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' });
+    }
+
+    const { media, error } = await saveImage(req.file, 'product', req.userId);
+    if (error) return res.status(400).json({ message: error });
+
+    const old = product.image;
+    product.image = media._id;
+    await product.save();
+    if (old) await deleteMedia(old);
+
+    return res.json(product);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  }
+};
+
+// DELETE /api/inventory/:id/image
+exports.removeImage = async (req, res) => {
+  try {
+    const product = await Product.findOne({ _id: req.params.id, storeId: req.currentUser.storeId });
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' });
+    }
+
+    const old = product.image;
+    product.image = null;
+    await product.save();
+    if (old) await deleteMedia(old);
+
+    return res.json(product);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  }
+};
+
 // DELETE /api/inventory/:id
 exports.remove = async (req, res) => {
   try {
@@ -139,6 +183,8 @@ exports.remove = async (req, res) => {
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' });
     }
+
+    if (product.image) await deleteMedia(product.image);
 
     return res.json({ message: 'Product removed.' });
   } catch (err) {

@@ -49,6 +49,41 @@ const FAV_INLINE = {
   flexShrink: 0,
 };
 
+// Product photo (or a placeholder so cards stay the same height).
+const PHOTO_BOX = {
+  width: '100%',
+  height: 130,
+  borderRadius: 10,
+  overflow: 'hidden',
+  margin: '8px 0',
+  background: 'rgba(127,127,127,0.12)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 38,
+};
+
+function ProductPhoto({ image, name }) {
+  const [failed, setFailed] = useState(false);
+  const base = String(api.defaults.baseURL || '/api').replace(/\/$/, '');
+
+  return (
+    <div style={PHOTO_BOX}>
+      {image && !failed ? (
+        <img
+          src={`${base}/media/${image}`}
+          alt={name}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      ) : (
+        <span aria-hidden="true">🛢️</span>
+      )}
+    </div>
+  );
+}
+
 export function ProductCard({ p, onOpenStore }) {
   const { addItem } = useCart();
   const favorites = useFavorites();
@@ -86,6 +121,7 @@ export function ProductCard({ p, onOpenStore }) {
           </button>
         </div>
       </div>
+      <ProductPhoto image={p.image} name={p.name} />
       <h3>{p.name}</h3>
       <p className="muted small">{[p.brand, p.sizeKg ? `${p.sizeKg} kg` : null].filter(Boolean).join(' · ') || '—'}</p>
       {onOpenStore && (
