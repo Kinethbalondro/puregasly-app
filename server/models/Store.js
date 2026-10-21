@@ -26,6 +26,10 @@ const storeSchema = new mongoose.Schema(
     phone: { type: String, trim: true, default: '', maxlength: 30 },
     description: { type: String, trim: true, default: '', maxlength: 300 },
 
+    // Used for the area price benchmark (stored lowercase so matching is easy).
+    city: { type: String, trim: true, lowercase: true, default: '', maxlength: 60, index: true },
+    province: { type: String, trim: true, lowercase: true, default: 'pangasinan', maxlength: 60, index: true },
+
     // Pinned map location of the store (optional). Used as the start of the
     // delivery route shown to riders.
     lat: { type: Number, default: null, min: -90, max: 90 },
