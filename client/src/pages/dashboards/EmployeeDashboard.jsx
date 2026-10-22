@@ -18,21 +18,44 @@ export default function EmployeeDashboard({ user }) {
 
       <div className="feature-grid big">
         {has('manage_orders') && (
-          <Link to="/store-orders" className="feature-card clickable">📦 Orders<span>Accept & update deliveries</span></Link>
+          <Link to="/store-orders" className="feature-card clickable">
+            📦 Orders<span>Accept & update deliveries</span>
+          </Link>
         )}
         {has('manage_inventory') && (
-          <Link to="/inventory" className="feature-card clickable">📊 Inventory & Sales<span>Products & stock</span></Link>
+          <Link to="/inventory" className="feature-card clickable">
+            📊 Inventory & Sales<span>Products & stock</span>
+          </Link>
         )}
         {(has('manage_orders') || has('manage_coupons')) && (
-          <Link to="/coupons" className="feature-card clickable">🎟️ Coupons<span>Promo codes</span></Link>
+          <Link to="/coupons" className="feature-card clickable">
+            🎟️ Coupons & Promos<span>Promo codes & Free Delivery</span>
+          </Link>
         )}
         {has('view_analytics') && (
-          <Link to="/analytics" className="feature-card clickable">📈 Analytics<span>Revenue & top products</span></Link>
+          <Link to="/analytics" className="feature-card clickable">
+            📈 Analytics<span>Revenue & top products</span>
+          </Link>
         )}
         {(has('manage_orders') || has('manage_riders')) && (
-          <Link to="/riders" className="feature-card clickable">🛵 Riders<span>Add & assign deliveries</span></Link>
+          <Link to="/riders" className="feature-card clickable">
+            🛵 Riders<span>Add & assign deliveries</span>
+          </Link>
         )}
-        {none && <div className="feature-card">No permissions assigned yet<span>Ask your owner</span></div>}
+        
+        {/* FREE DELIVERY STATUS / QUICK BADGE */}
+        {user.store && (
+          <div className="feature-card" style={{ borderColor: '#22c55e' }}>
+            🚚 Free Delivery Active
+            <span>Threshold: Subtotal ₱1,000+</span>
+          </div>
+        )}
+
+        {none && (
+          <div className="feature-card">
+            No permissions assigned yet<span>Ask your owner</span>
+          </div>
+        )}
       </div>
 
       <p className="placeholder-note">
