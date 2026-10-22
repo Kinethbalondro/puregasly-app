@@ -170,7 +170,14 @@ export default function CartDrawer() {
     setCouponError('');
   }
 
-  const finalTotal = Math.max(0, total - (coupon?.discount || 0));
+  // --- FREE DELIVERY LOGIC ---
+  const STANDARD_DELIVERY_FEE = 50; // Standard fee (₱50)
+  const FREE_DELIVERY_THRESHOLD = 1000; // Libre kapag umabot ng ₱1,000 ang subtotal
+  const deliveryFee = total >= FREE_DELIVERY_THRESHOLD ? 0 : STANDARD_DELIVERY_FEE;
+  
+  // Final total kasama ang delivery fee at bawas ng coupon discount kung meron
+  const finalTotal = Math.max(0, total + deliveryFee - (coupon?.discount || 0));
+
   const hasPin = pin.lat !== null && pin.lng !== null;
 
   // Time slot choices (recomputed each render so past slots drop off).
@@ -294,6 +301,19 @@ export default function CartDrawer() {
               <span>Subtotal</span>
               <span>{formatPHP(total)}</span>
             </div>
+            
+            {/* Delivery Fee Display */}
+            <div className="cart-total">
+              <span>Delivery Fee</span>
+              <span>
+                {deliveryFee === 0 ? (
+                  <strong style={{ color: '#22c55e' }}>FREE</strong>
+                ) : (
+                  formatPHP(deliveryFee)
+                )}
+              </span>
+            </div>
+
             {coupon && (
               <div className="cart-total discount-row">
                 <span>Discount ({coupon.code})</span>
