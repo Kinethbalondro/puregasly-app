@@ -171,9 +171,7 @@ export default function CartDrawer() {
   }
 
   // --- FREE DELIVERY LOGIC ---
-  const STANDARD_DELIVERY_FEE = 50; // Standard fee (₱50)
-  const FREE_DELIVERY_THRESHOLD = 1000; // Libre kapag umabot ng ₱1,000 ang subtotal
-  const deliveryFee = total >= FREE_DELIVERY_THRESHOLD ? 0 : STANDARD_DELIVERY_FEE;
+  const deliveryFee = 0; // Laging libre ang delivery sa lahat ng orders at produkto
   
   // Final total kasama ang delivery fee at bawas ng coupon discount kung meron
   const finalTotal = Math.max(0, total + deliveryFee - (coupon?.discount || 0));
@@ -306,11 +304,7 @@ export default function CartDrawer() {
             <div className="cart-total">
               <span>Delivery Fee</span>
               <span>
-                {deliveryFee === 0 ? (
-                  <strong style={{ color: '#22c55e' }}>FREE</strong>
-                ) : (
-                  formatPHP(deliveryFee)
-                )}
+                <strong style={{ color: '#22c55e' }}>FREE</strong>
               </span>
             </div>
 
