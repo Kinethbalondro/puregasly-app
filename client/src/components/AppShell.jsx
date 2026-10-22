@@ -16,6 +16,7 @@ function navFor(user) {
     links.push({ to: '/orders', label: 'My Orders' });
     links.push({ to: '/favorites', label: 'Favorites' });
     links.push({ to: '/addresses', label: 'Addresses' });
+    links.push({ to: '/price-trends', label: 'Price Trends' }); // NEW
   }
   if (user.role === 'rider') {
     links[0].label = 'My Deliveries';
@@ -25,6 +26,7 @@ function navFor(user) {
     if (has('manage_inventory')) links.push({ to: '/inventory', label: 'Inventory' });
     if (has('manage_orders') || has('manage_coupons')) links.push({ to: '/coupons', label: 'Coupons' });
     if (has('view_analytics')) links.push({ to: '/analytics', label: 'Analytics' });
+    if (has('view_analytics')) links.push({ to: '/price-trends', label: 'Price Trends' }); // NEW
     if (has('manage_orders') || has('manage_riders')) links.push({ to: '/riders', label: 'Riders' });
     if (user.role === 'owner') links.push({ to: '/employees', label: 'Employees' });
   }

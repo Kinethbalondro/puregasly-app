@@ -17,6 +17,7 @@ export default function AdminDashboard({ user }) {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
   const [recentActivity, setRecentActivity] = useState(null);
+  const [pendingReports, setPendingReports] = useState(0); // NEW
 
   const loadStats = useCallback(() => {
     api.get('/admin/stats').then((r) => setStats(r.data)).catch((e) => setError(errMsg(e)));
@@ -24,6 +25,11 @@ export default function AdminDashboard({ user }) {
       .get('/admin/audit-log')
       .then((r) => setRecentActivity(r.data.slice(0, 5)))
       .catch(() => setRecentActivity([]));
+    // NEW: number of reports waiting for review (shown on the Reports tab)
+    api
+      .get('/reports', { params: { status: 'pending' } })
+      .then((r) => setPendingReports(r.data.length))
+      .catch(() => setPendingReports(0));
   }, []);
 
   useEffect(() => {
@@ -96,6 +102,9 @@ export default function AdminDashboard({ user }) {
         </button>
         <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Users</button>
         <button className={tab === 'reviews' ? 'active' : ''} onClick={() => setTab('reviews')}>Reviews</button>
+        <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
+          Reports{pendingReports > 0 && <span className="tab-count hot">{pendingReports}</span>}
+        </button>
         <button className={tab === 'audit' ? 'active' : ''} onClick={() => setTab('audit')}>Audit Log</button>
       </div>
 
@@ -103,6 +112,7 @@ export default function AdminDashboard({ user }) {
       {tab === 'stores' && <Stores onChange={loadStats} />}
       {tab === 'users' && <Users onChange={loadStats} />}
       {tab === 'reviews' && <Reviews />}
+      {tab === 'reports' && <Reports onChange={loadStats} />}
       {tab === 'audit' && <AuditLog />}
 
       {tab !== 'audit' && (
@@ -496,6 +506,205 @@ function Reviews() {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Reports (abusive messages, fake listings, no-shows) ---------- */
+const REPORT_TYPE_LABEL = {
+  abusive_message: 'Abusive message',
+  fake_listing: 'Fake listing',
+  no_show: 'No-show',
+  other: 'Other',
+};
+
+// Reuses the status-pill colors that already exist in the stylesheet.
+const REPORT_STATUS_PILL = {
+  pending: 'preparing',
+  actioned: 'approved',
+  dismissed: 'cancelled',
+};
+
+const ACTION_DONE_LABEL = {
+  warn: 'Warned',
+  mute: 'Muted',
+  remove: 'Removed',
+  none: 'Dismissed',
+};
+
+function Reports({ onChange }) {
+  const toast = useToast();
+  const [reports, setReports] = useState([]);
+  const [status, setStatus] = useState('pending');
+  const [type, setType] = useState('');
+  const [muteDays, setMuteDays] = useState(3);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [modal, setModal] = useState(null); // { action: 'warn' | 'mute' | 'remove', report }
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get('/reports', {
+        params: { status: status || undefined, type: type || undefined },
+      });
+      setReports(res.data);
+      setError('');
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [status, type]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function resolve(report, action, adminNote, successMsg) {
+    try {
+      await api.patch(`/reports/${report._id || report.id}`, { action, adminNote, muteDays });
+      toast(successMsg);
+      await load();
+      onChange();
+    } catch (e) {
+      toast(errMsg(e), { type: 'error' });
+    }
+  }
+
+  const targetName = (r) => r.reportedUser?.name || r.reportedStore?.name || 'this account';
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h3>Reports</h3>
+        <div className="row-actions">
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="pending">Pending</option>
+            <option value="actioned">Action taken</option>
+            <option value="dismissed">Dismissed</option>
+            <option value="">All</option>
+          </select>
+          <select value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="">All types</option>
+            {Object.entries(REPORT_TYPE_LABEL).map(([k, label]) => (
+              <option key={k} value={k}>{label}</option>
+            ))}
+          </select>
+          <select value={muteDays} onChange={(e) => setMuteDays(Number(e.target.value))} title="How long the Mute action lasts">
+            <option value={1}>Mute: 1 day</option>
+            <option value={3}>Mute: 3 days</option>
+            <option value={7}>Mute: 7 days</option>
+            <option value={30}>Mute: 30 days</option>
+          </select>
+        </div>
+      </div>
+
+      {error && <div className="message error">{error}</div>}
+
+      {loading ? (
+        <SkeletonRows count={3} />
+      ) : reports.length === 0 ? (
+        <p className="empty">{status === 'pending' ? 'No reports waiting. 🎉' : 'No reports found.'}</p>
+      ) : (
+        <div className="row-list">
+          {reports.map((r) => {
+            const id = r._id || r.id;
+            const isPending = r.status === 'pending';
+            const mutedNow = r.reportedUser?.mutedUntil && new Date(r.reportedUser.mutedUntil) > new Date();
+            const warningCount = r.reportedUser?.warnings?.length || 0;
+
+            return (
+              <div key={id} className="row-item">
+                <div>
+                  <strong>{REPORT_TYPE_LABEL[r.type] || r.type}</strong>{' '}
+                  <span className={`status-pill ${REPORT_STATUS_PILL[r.status] || ''}`}>{r.status}</span>
+
+                  <div className="small">
+                    Against:{' '}
+                    <strong>
+                      {r.reportedUser
+                        ? `${r.reportedUser.name} (${ROLE_LABEL[r.reportedUser.role] || r.reportedUser.role})`
+                        : r.reportedStore
+                        ? `🏪 ${r.reportedStore.name}`
+                        : 'Unknown'}
+                    </strong>
+                  </div>
+                  {r.reportedUser && (
+                    <div className="muted small">
+                      {r.reportedUser.email}
+                      {warningCount > 0 && ` · ${warningCount} warning${warningCount === 1 ? '' : 's'}`}
+                      {mutedNow && ' · currently muted'}
+                      {r.reportedUser.banned && ' · banned'}
+                    </div>
+                  )}
+
+                  <div className="muted small">
+                    Reported by {r.reporter?.name || 'Unknown'} ({r.reporter?.email || 'no email'}) · {formatDateTime(r.createdAt)}
+                  </div>
+
+                  <p className="small">{r.reason}</p>
+
+                  {!isPending && (
+                    <div className="muted small">
+                      {ACTION_DONE_LABEL[r.action] || r.action}
+                      {r.adminNote && ` · Note: ${r.adminNote}`}
+                      {r.resolvedAt && ` · ${formatDateTime(r.resolvedAt)}`}
+                    </div>
+                  )}
+                </div>
+
+                {isPending && (
+                  <div className="row-actions">
+                    <button
+                      className="btn-solid small"
+                      onClick={() => resolve(r, 'dismiss', '', 'Report dismissed.')}
+                    >
+                      Dismiss
+                    </button>
+                    <button className="btn-danger-outline small" onClick={() => setModal({ action: 'warn', report: r })}>Warn</button>
+                    <button className="btn-danger-outline small" onClick={() => setModal({ action: 'mute', report: r })}>Mute</button>
+                    <button className="btn-danger-outline small" onClick={() => setModal({ action: 'remove', report: r })}>Remove</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {modal?.action === 'warn' && (
+        <ReasonModal
+          title={`Warn ${targetName(modal.report)}?`}
+          description="The warning is saved on the account. If only a store was reported, the store owner gets the warning."
+          confirmLabel="Send warning"
+          danger
+          requireReason
+          onSubmit={(note) => resolve(modal.report, 'warn', note, 'Warning sent.')}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.action === 'mute' && (
+        <ReasonModal
+          title={`Mute ${targetName(modal.report)} for ${muteDays} day${muteDays === 1 ? '' : 's'}?`}
+          description="While muted they cannot send messages, post reviews or file reports. If only a store was reported, the store owner is muted."
+          confirmLabel="Mute"
+          danger
+          requireReason
+          onSubmit={(note) => resolve(modal.report, 'mute', note, 'Account muted.')}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.action === 'remove' && (
+        <ReasonModal
+          title={`Remove ${targetName(modal.report)} from the network?`}
+          description="A reported user is banned and signed out. A reported store is suspended (banned) and hidden from customers."
+          confirmLabel="Remove"
+          danger
+          requireReason
+          onSubmit={(note) => resolve(modal.report, 'remove', note, 'Removed from the network.')}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );

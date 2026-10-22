@@ -30,11 +30,14 @@ const PRODUCTS = [
 ];
 
 const ADDRESSES = [
-  'Brgy. Bantay, Vigan City',
-  'Brgy. Pagburnayan, Vigan City',
-  'Brgy. Tamag, Vigan City',
-  'Brgy. Mindoro, Vigan City',
-  'Brgy. Salindeg, Vigan City',
+  'Brgy. Poblacion, Alaminos City',
+  'Brgy. Camaley, Binmaley',
+  'Brgy. Poblacion East, Calasiao',
+  'Brgy. Lucao, Dagupan City',
+  'Brgy. Libsong East, Lingayen',
+  'Brgy. Poblacion, Mangaldan',
+  'Brgy. Bolingit, San Carlos City',
+  'Brgy. Poblacion, Urdaneta City',
 ];
 
 // Small deterministic random generator so every run makes the same kind of data.
@@ -49,7 +52,7 @@ function makeRng(seed) {
 async function findStore() {
   const store = await Store.findOne({ name: STORE_NAME });
   if (!store) {
-    console.error(`Store "${STORE_NAME}" not found. Check the exact name, or pass store="Name". - seedSalesProducts.js:52`);
+    console.error(`Store "${STORE_NAME}" not found. Check the exact name, or pass store="Name". - seedSalesProducts.js:55`);
     await mongoose.disconnect();
     process.exit(1);
   }
@@ -65,7 +68,7 @@ async function remove() {
     products += r.deletedCount;
   }
   const cust = await User.deleteOne({ email: SEED_CUSTOMER_EMAIL });
-  console.log(`Removed from "${STORE_NAME}": ${orders.deletedCount} orders, ${products} products, ${cust.deletedCount} seed customer. - seedSalesProducts.js:68`);
+  console.log(`Removed from "${STORE_NAME}": ${orders.deletedCount} orders, ${products} products, ${cust.deletedCount} seed customer. - seedSalesProducts.js:71`);
 }
 
 async function add() {
@@ -73,7 +76,7 @@ async function add() {
 
   const already = await Order.countDocuments({ storeId: store._id, orderNo: { $regex: `^${ORDER_PREFIX}` } });
   if (already > 0) {
-    console.log(`"${STORE_NAME}" already has ${already} seed orders. Run with remove first if you want to redo it. - seedSalesProducts.js:76`);
+    console.log(`"${STORE_NAME}" already has ${already} seed orders. Run with remove first if you want to redo it. - seedSalesProducts.js:79`);
     return;
   }
 
@@ -170,7 +173,7 @@ async function add() {
     await prod.save();
   }
 
-  console.log(`Added to "${STORE_NAME}": ${products.length} products, ${ORDER_COUNT} completed orders, total sales PHP ${revenue.toFixed(2)}. - seedSalesProducts.js:173`);
+  console.log(`Added to "${STORE_NAME}": ${products.length} products, ${ORDER_COUNT} completed orders, total sales PHP ${revenue.toFixed(2)}. - seedSalesProducts.js:176`);
 }
 
 async function run() {

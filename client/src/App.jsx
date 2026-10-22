@@ -25,6 +25,7 @@ import ManageCoupons from './pages/ManageCoupons';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import ForgotPassword from './pages/ForgotPassword';
 import Profile from './pages/Profile';
+import PriceTrends from './pages/PriceTrends'; // NEW
 
 const guard = (element, roles) => <ProtectedRoute roles={roles}>{element}</ProtectedRoute>;
 
@@ -68,6 +69,7 @@ export default function App() {
                 <Route path="/favorites" element={guard(<Favorites />, ['customer'])} />
                 <Route path="/addresses" element={guard(<AddressBook />, ['customer'])} />
                 <Route path="/coupons" element={guard(<ManageCoupons />, ['owner', 'employee'])} />
+                <Route path="/price-trends" element={guard(<PriceTrends />, ['customer', 'owner', 'employee'])} /> {/* NEW */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </CartProvider>

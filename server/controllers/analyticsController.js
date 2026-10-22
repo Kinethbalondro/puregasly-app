@@ -99,3 +99,78 @@ exports.summary = async (req, res) => {
     return res.status(500).json({ message: 'Something went wrong.' });
   }
 };
+
+// NEW: GET /api/analytics/demand?days=90
+// Anonymous demand patterns for this store: busiest days, popular sizes, top areas.
+// No customer names or exact addresses are ever returned.
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const PH_OFFSET = 8 * 60 * 60 * 1000; // Philippine time (UTC+8)
+
+function areaOf(address) {
+  const parts = String(address || '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return 'Unknown area';
+  // Keep only the barangay/city part, never the street or house number.
+  return parts.slice(-2).join(', ');
+}
+
+exports.demand = async (req, res) => {
+  try {
+    const storeId = req.currentUser.storeId;
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 90, 7), 180);
+    const since = new Date(Date.now() - days * 86400000);
+
+    const orders = await Order.find({
+      storeId,
+      status: { $ne: 'cancelled' },
+      createdAt: { $gte: since },
+    }).select('createdAt items deliveryAddress');
+
+    // ---- busiest days (orders per weekday)
+    const dayCounts = WEEKDAYS.map((name) => ({ day: name, orders: 0 }));
+    orders.forEach((o) => {
+      const d = new Date(new Date(o.createdAt).getTime() + PH_OFFSET).getUTCDay();
+      dayCounts[d].orders += 1;
+    });
+
+    // ---- popular sizes (units sold per size)
+    const sizeMap = new Map();
+    orders.forEach((o) => {
+      o.items.forEach((it) => {
+        const label = it.sizeKg ? `${it.sizeKg} kg` : 'Other / no size';
+        sizeMap.set(label, (sizeMap.get(label) || 0) + it.qty);
+      });
+    });
+    const sizes = [...sizeMap.entries()]
+      .map(([size, units]) => ({ size, units }))
+      .sort((a, b) => b.units - a.units)
+      .slice(0, 8);
+
+    // ---- areas that order most
+    const areaMap = new Map();
+    orders.forEach((o) => {
+      const area = areaOf(o.deliveryAddress);
+      areaMap.set(area, (areaMap.get(area) || 0) + 1);
+    });
+    const areas = [...areaMap.entries()]
+      .map(([area, count]) => ({ area, orders: count }))
+      .sort((a, b) => b.orders - a.orders)
+      .slice(0, 8);
+
+    const busiest = [...dayCounts].sort((a, b) => b.orders - a.orders)[0];
+
+    return res.json({
+      days,
+      totalOrders: orders.length,
+      busiestDay: busiest && busiest.orders > 0 ? busiest.day : null,
+      byDay: dayCounts,
+      sizes,
+      areas,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  }
+};

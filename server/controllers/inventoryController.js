@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const PriceHistory = require('../models/PriceHistory'); // NEW
 const { saveImage, deleteMedia } = require('../utils/media');
 
 const CATEGORIES = ['lpg', 'refill', 'accessory'];
@@ -76,6 +77,25 @@ function checkPromo(price, promoPrice) {
   return null;
 }
 
+// NEW: Saves one price-history row. Never blocks the request if it fails.
+async function recordPrice(product) {
+  try {
+    await PriceHistory.create({
+      product: product._id,
+      storeId: product.storeId,
+      productName: product.name,
+      brand: product.brand,
+      category: product.category,
+      sizeKg: product.sizeKg ?? null,
+      price: product.price,
+      promoPrice: product.promoPrice ?? null,
+      effectivePrice: product.effectivePrice,
+    });
+  } catch (err) {
+    console.error('Price history error: - inventoryController.js:95', err.message);
+  }
+}
+
 // GET /api/inventory
 exports.list = async (req, res) => {
   try {
@@ -97,6 +117,7 @@ exports.create = async (req, res) => {
     if (promoErr) return res.status(400).json({ message: promoErr });
 
     const product = await Product.create({ ...value, storeId: req.currentUser.storeId });
+    await recordPrice(product); // NEW
     return res.status(201).json(product);
   } catch (err) {
     console.error(err);
@@ -120,8 +141,18 @@ exports.update = async (req, res) => {
     const promoErr = checkPromo(nextPrice, nextPromo);
     if (promoErr) return res.status(400).json({ message: promoErr });
 
+    // NEW: remember the old prices so we only record real changes
+    const priceBefore = product.price;
+    const promoBefore = product.promoPrice;
+
     product.set(value);
     await product.save();
+
+    // NEW
+    if (product.price !== priceBefore || product.promoPrice !== promoBefore) {
+      await recordPrice(product);
+    }
+
     return res.json(product);
   } catch (err) {
     console.error(err);

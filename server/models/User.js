@@ -54,6 +54,17 @@ const userSchema = new mongoose.Schema(
     banned: { type: Boolean, default: false },
     banReason: { type: String, default: '' },
     bannedAt: { type: Date, default: null },
+
+    // Moderation: warnings and temporary mute (set by admin from reports).
+    warnings: [
+      {
+        message: { type: String, default: '' },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        at: { type: Date, default: Date.now },
+      },
+    ],
+    mutedUntil: { type: Date, default: null },
+
     // Profile picture (Media id). Shown to others where relevant (reviews, team lists).
     avatar: { type: mongoose.Schema.Types.ObjectId, ref: 'Media', default: null },
     // Recorded when someone ticks the privacy-policy box at sign-up.

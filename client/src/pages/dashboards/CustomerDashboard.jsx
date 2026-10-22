@@ -7,6 +7,7 @@ import RatingStars from '../../components/RatingStars';
 import { SkeletonGrid } from '../../components/Skeleton';
 import usePageTitle from '../../utils/usePageTitle';
 import { useFavorites } from '../../context/FavoritesContext';
+import ReportModal from '../../components/ReportModal'; // NEW
 
 function useDebounced(value, ms = 300) {
   const [v, setV] = useState(value);
@@ -195,6 +196,7 @@ export default function CustomerDashboard({ user }) {
   const [stores, setStores] = useState([]);
   const [products, setProducts] = useState([]);
   const [storeDetail, setStoreDetail] = useState(null);
+  const [reporting, setReporting] = useState(false); // NEW
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -278,6 +280,10 @@ export default function CustomerDashboard({ user }) {
                   {[storeDetail.store.address, storeDetail.store.phone].filter(Boolean).join(' · ') || 'No contact info yet'}
                 </p>
                 {storeDetail.store.description && <p className="small">{storeDetail.store.description}</p>}
+                {/* NEW: Report button */}
+                <button className="btn-danger-outline small" onClick={() => setReporting(true)}>
+                  🚩 Report this store
+                </button>
               </div>
             </div>
             <div className="filter-bar">
@@ -315,6 +321,14 @@ export default function CustomerDashboard({ user }) {
           </>
         )}
         {loading && !storeDetail && <SkeletonGrid count={6} />}
+        {/* NEW: Report popup */}
+        {reporting && storeDetail && (
+          <ReportModal
+            storeId={storeDetail.store.id}
+            storeName={storeDetail.store.name}
+            onClose={() => setReporting(false)}
+          />
+        )}
       </>
     );
   }

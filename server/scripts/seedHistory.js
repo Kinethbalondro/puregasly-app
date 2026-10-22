@@ -26,14 +26,14 @@ const NAMES = [
 ];
 
 const ADDRESSES = [
-  'Brgy. Bantay, Vigan City',
-  'Brgy. Pagburnayan, Vigan City',
-  'Brgy. Tamag, Vigan City',
-  'Brgy. Mindoro, Vigan City',
-  'Brgy. Salindeg, Vigan City',
-  'Brgy. Poblacion, Dagupan City',
+  'Brgy. Poblacion, Alaminos City',
+  'Brgy. Camaley, Binmaley',
+  'Brgy. Poblacion East, Calasiao',
   'Brgy. Lucao, Dagupan City',
-  'Brgy. Poblacion, Lingayen',
+  'Brgy. Libsong East, Lingayen',
+  'Brgy. Poblacion, Mangaldan',
+  'Brgy. Bolingit, San Carlos City',
+  'Brgy. Poblacion, Urdaneta City',
 ];
 
 // Small deterministic random generator so every run makes the same kind of data.

@@ -46,11 +46,33 @@ function BarChart({ series }) {
   );
 }
 
+// NEW: simple horizontal bars for demand insights
+function DemandBars({ rows, labelKey, valueKey, unit, highlight }) {
+  const max = Math.max(1, ...rows.map((r) => r[valueKey]));
+  if (rows.length === 0 || rows.every((r) => r[valueKey] === 0)) {
+    return <p className="empty small">Not enough orders yet.</p>;
+  }
+  return (
+    <div>
+      {rows.map((r) => (
+        <div key={r[labelKey]} className="hbar">
+          <span style={highlight && r[labelKey] === highlight ? { fontWeight: 700 } : undefined}>{r[labelKey]}</span>
+          <div className="hbar-track">
+            <div className="hbar-fill" style={{ width: `${(r[valueKey] / max) * 100}%` }} />
+          </div>
+          <span>{r[valueKey]} {unit}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function StoreAnalytics() {
   usePageTitle('Analytics');
   const [days, setDays] = useState(30);
   const [data, setData] = useState(null);
   const [reviews, setReviews] = useState(null);
+  const [demand, setDemand] = useState(null); // NEW
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -66,6 +88,11 @@ export default function StoreAnalytics() {
 
   useEffect(() => {
     api.get('/reviews/store').then((res) => setReviews(res.data)).catch(() => setReviews([]));
+  }, []);
+
+  // NEW: demand insights (last 90 days)
+  useEffect(() => {
+    api.get('/analytics/demand', { params: { days: 90 } }).then((res) => setDemand(res.data)).catch(() => setDemand(false));
   }, []);
 
   const avgRating = reviews && reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null;
@@ -163,6 +190,39 @@ export default function StoreAnalytics() {
                 ))
               )}
             </div>
+          </div>
+
+          {/* NEW: Demand insights */}
+          <div className="panel">
+            <div className="panel-head">
+              <h3>Demand insights</h3>
+              <span className="muted small">Last 90 days · anonymous, no customer names</span>
+            </div>
+            {demand === null ? (
+              <p className="muted small">Loading...</p>
+            ) : demand === false ? (
+              <p className="empty small">Could not load demand insights.</p>
+            ) : (
+              <>
+                {demand.busiestDay && (
+                  <p className="small">
+                    Your busiest day is <strong>{demand.busiestDay}</strong>. Stock up before it.
+                  </p>
+                )}
+                <div className="two-col">
+                  <div>
+                    <h4>Busiest days</h4>
+                    <DemandBars rows={demand.byDay} labelKey="day" valueKey="orders" unit="orders" highlight={demand.busiestDay} />
+                  </div>
+                  <div>
+                    <h4>Popular sizes</h4>
+                    <DemandBars rows={demand.sizes} labelKey="size" valueKey="units" unit="units" />
+                  </div>
+                </div>
+                <h4>Areas that order most</h4>
+                <DemandBars rows={demand.areas} labelKey="area" valueKey="orders" unit="orders" />
+              </>
+            )}
           </div>
 
           <div className="panel">
