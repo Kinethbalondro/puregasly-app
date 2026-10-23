@@ -5,3 +5,6 @@ dist/
 .DS_Store
 
 server/accounts.csv
+build/
+uploads/
+tons-update.patch
